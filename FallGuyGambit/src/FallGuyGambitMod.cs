@@ -39,9 +39,11 @@ namespace Gambonanza.FallGuyGambit
                 // saved once per game is strong but passive.
                 .WithPrice(8)
                 .WithVisual(sprite)
-                // GambitApi sizes a modded card against the vanilla template
-                // (28x32), which is at the large end of the real cards. 0.9
-                // keeps it in line with its rail neighbours.
+                // The art uses the vanilla template's exact canvas (28x32,
+                // inked edge-to-edge, bottom-heavy) so GambitApi's rescale and
+                // pivot copy land it precisely where a vanilla card sits. The
+                // template (Addiction) is the largest card in the game; 0.9
+                // puts this one mid-pack among its rail neighbours.
                 .WithVisualScale(0.9f)
                 .WithBaseGambit<GambitFallGuy>()
                 .AutoUnlock(true)
@@ -51,15 +53,15 @@ namespace Gambonanza.FallGuyGambit
         }
 
         /// <summary>
-        /// Crude stand-in used only when fallguy.png is missing: a pawn dropping
-        /// toward a rescue net stretched between two poles. Portrait, like the
-        /// real art, so a missing file does not also produce a card twice the
-        /// width of its neighbours.
+        /// Crude stand-in used only when fallguy.png is missing: a pawn caught
+        /// in a rescue net slung between two poles. Same 28x32 canvas as the
+        /// vanilla template sprite and inked edge-to-edge like vanilla cards,
+        /// so a missing file does not also change where the card hangs.
         /// </summary>
         private static Sprite GenerateFallbackSprite()
         {
-            const int w = 24;
-            const int h = 28;
+            const int w = 28;
+            const int h = 32;
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
             var pixels = new Color[w * h];
 
@@ -68,29 +70,31 @@ namespace Gambonanza.FallGuyGambit
             var wood = new Color(0.58f, 0.37f, 0.18f, 1f);
             var net = new Color(0.85f, 0.23f, 0.23f, 1f);
 
-            // Texture rows run bottom-up: net first, pawn above it.
+            // Texture rows run bottom-up (y=0 is the baseline the card stands on).
             for (var y = 0; y < h; y++)
             {
                 for (var x = 0; x < w; x++)
                 {
                     var c = Color.clear;
 
-                    // Two poles holding the net.
-                    if (x >= 2 && x <= 3 && y >= 1 && y <= 8) c = wood;
-                    else if (x >= 20 && x <= 21 && y >= 1 && y <= 8) c = wood;
-                    // The net itself, sagging one pixel in the middle.
-                    else if (y >= 5 && y <= 7 && x >= 4 && x <= 19)
-                    {
-                        var sag = (x >= 9 && x <= 14) ? 1 : 0;
-                        if (y == 7 - sag || ((x + y) % 2 == 0 && y == 6 - sag)) c = net;
-                    }
+                    // Two full-height poles with flared feet on the baseline.
+                    if (y <= 1 && (x <= 4 || x >= 23)) c = wood;
+                    else if (y >= 2 && y <= 17 && ((x >= 1 && x <= 3) || (x >= 24 && x <= 26))) c = wood;
 
-                    // The falling pawn: head, collar, body, base.
-                    var dx = x - 12;
-                    if (dx * dx + (y - 23) * (y - 23) <= 6) c = ivory;          // head
-                    else if (y >= 19 && y <= 20 && x >= 9 && x <= 15) c = shade; // collar
-                    else if (y >= 14 && y <= 18 && x >= 10 && x <= 14) c = ivory; // body
-                    else if (y >= 12 && y <= 13 && x >= 8 && x <= 16) c = shade; // base
+                    // The net: a parabola resting on the pole tops (y=17),
+                    // sagging 7 rows in the middle where the pawn sits.
+                    var t = (x - 13.5f) / 9.5f;
+                    var sag = Mathf.RoundToInt(7f * Mathf.Max(0f, 1f - t * t));
+                    var netY = 17 - sag;
+                    if (x >= 4 && x <= 23 && y <= netY && y >= netY - 2) c = net;
+
+                    // The pawn, base sunk into the sag.
+                    if (y >= 9 && y <= 11 && x >= 9 && x <= 18) c = ivory;       // base
+                    else if (y >= 12 && y <= 15 && x >= 11 && x <= 16) c = ivory; // body
+                    else if (y >= 16 && y <= 17 && x >= 10 && x <= 17) c = shade; // collar
+                    var dx = x - 14;
+                    var dy = y - 21;
+                    if (dx * dx + dy * dy <= 10) c = ivory;                      // head
 
                     pixels[y * w + x] = c;
                 }

@@ -78,8 +78,15 @@ death. That is also why the charge is not consumed on that branch.
 
 ## A note on the art
 
-A pawn caught mid-drop above a firefighter's rescue net. Same canvas rules as
-the other cards here: GambitApi scales a modded sprite so its canvas height
-matches the vanilla template's, so `make_art.py` works on a portrait 24x28
-canvas, auto-centres the ink, outlines the silhouette in a pass, and the card
-is registered with `WithVisualScale(0.9f)`.
+A pawn caught in the sag of a firefighter's rescue net. The geometry comes
+from reading the game's own assets: vanilla gambit sprites are bottom-pivoted
+(pivot y=0, PPU 32), so cards STAND on a shared baseline in the gambit rail,
+and vanilla ink fills its canvas edge-to-edge - the template (Addiction,
+28x32) is flush on every side. Art whose mass floats high in a sparse canvas
+reads as a levitating speck next to those dense objects, which is exactly what
+the first draft of this card did.
+
+So `make_art.py` draws on the template's exact 28x32 canvas, inks it
+edge-to-edge with the composition's weight sitting low, outlines the
+silhouette in a pass, and the card is registered with `WithVisualScale(0.9f)`
+to sit mid-pack among neighbours (the template is the game's largest card).

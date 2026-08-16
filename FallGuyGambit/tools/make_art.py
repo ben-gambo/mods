@@ -3,20 +3,24 @@
 
 Pure stdlib (zlib + struct) so it runs anywhere Python 3 does - no Pillow.
 
-The subject is the rescue itself: an ivory pawn caught mid-drop above a
-firefighter's rescue net stretched between two wooden poles, with a couple of
-motion dashes above it so the drop reads at 24px. The net is the card in one
-picture - the piece was going down, and something was waiting for it.
+The subject is the rescue at the moment it works: an ivory pawn sitting in the
+sag of a firefighter's rescue net strung between two wooden poles, a couple of
+motion dashes above where it just dropped from. One dense object, not a scene.
 
-Sizing notes inherited from ImpatientGambit's art, learned the hard way:
+Geometry notes, learned by reading the game's own assets with UnityPy:
 
-  - GambitApi scales a modded sprite so its *canvas* height matches the vanilla
-    template's, and copies the template's pivot as a fraction of the canvas.
-    So the canvas aspect ratio alone decides how wide the card lands on the
-    board. 24x28 stays inside GambitApi's 10% aspect-ratio tolerance against
-    the 28x32 vanilla template, and portrait keeps the card on the rail.
-  - The ink is auto-centred in the canvas and outlined as a pass over the
-    finished silhouette, both stolen verbatim from the Impatient art script.
+  - Vanilla gambit sprites are bottom-pivoted (pivot y=0) at PPU 32, so on the
+    gambit rail every card STANDS on a shared baseline and rises from it. Art
+    whose visual mass floats high in the canvas (a first draft had the pawn at
+    the top and the net at the bottom, air in between) reads as a levitating
+    speck next to the dense vanilla objects.
+  - GambitApi rescales a modded sprite so its canvas height matches the
+    template's canvas (SPR_Addiction, 28x32, ink flush to every edge), and
+    copies the template's pivot as a fraction of the canvas. So the closer the
+    canvas geometry is to 28x32 with edge-to-edge ink, the closer the placement
+    math is to the identity - this canvas IS 28x32 with edge-to-edge ink, and
+    the card is registered at 0.9 scale to sit mid-pack among its neighbours
+    (vanilla arts span roughly 25 to 32 rows of ink).
 
     python3 tools/make_art.py            # writes ../fallguy.png
 """
@@ -25,7 +29,8 @@ import os
 import struct
 import zlib
 
-W, H = 24, 28
+# Same canvas as the vanilla template sprite (SPR_Addiction).
+W, H = 28, 32
 
 CLEAR = (0, 0, 0, 0)
 OUTLINE = (0x16, 0x11, 0x1C, 255)
@@ -35,8 +40,21 @@ WOOD_LIT = (0xC9, 0x92, 0x52, 255)
 WOOD = (0x93, 0x5E, 0x2C, 255)
 WOOD_DARK = (0x5C, 0x37, 0x19, 255)
 NET = (0xD8, 0x3A, 0x3A, 255)
+NET_DARK = (0xA8, 0x26, 0x26, 255)
 NET_LIT = (0xE8, 0x6A, 0x5A, 255)
 DASH = (0x9C, 0xA2, 0xB2, 255)
+
+# Centre-line of the net's sag between the two pole tops (image coords, row 0
+# is the TOP of the finished PNG). Parabola: rests at the pole tops, dips in
+# the middle - where the pawn sits.
+POLE_TOP_Y = 15
+SAG_DEPTH = 7
+NET_X0, NET_X1 = 4, 23
+
+
+def net_y(x):
+    t = (x - 13.5) / 9.5
+    return POLE_TOP_Y + round(SAG_DEPTH * max(0.0, 1.0 - t * t))
 
 
 def build():
@@ -56,40 +74,39 @@ def build():
                     if 0 <= x < W and 0 <= y < H:
                         px[y][x] = colour
 
-    # Row 0 is the TOP of the finished PNG, so the scene reads top-down:
-    # motion dashes, then the pawn, then the net waiting under it.
+    # --- motion dashes: it just dropped in from up there --------------------
+    fill(6, 3, 6, 5, DASH)
+    fill(13, 1, 13, 3, DASH)
+    fill(14, 1, 14, 3, DASH)
+    fill(21, 3, 21, 5, DASH)
 
-    # --- motion dashes above: it is falling, not floating -------------------
-    fill(7, 1, 7, 2, DASH)
-    fill(12, 1, 12, 2, DASH)
-    fill(17, 1, 17, 2, DASH)
+    # --- the poles, planted wide so the net is the card's full width --------
+    for x0 in (1, 24):
+        fill(x0, POLE_TOP_Y - 1, x0 + 2, 29, WOOD)
+        fill(x0, POLE_TOP_Y - 1, x0, 29, WOOD_LIT)
+        fill(x0 + 2, POLE_TOP_Y - 1, x0 + 2, 29, WOOD_DARK)
+        fill(x0 - 1, 30, x0 + 3, 30, WOOD_DARK)  # flared foot on the baseline
 
-    # --- the pawn, mid-drop --------------------------------------------------
-    disc(12, 7, 3, IVORY)                     # head
-    px[6][10] = IVORY_DARK                    # cheek shade on the head
-    px[7][10] = IVORY_DARK
-    fill(9, 11, 15, 12, IVORY_DARK)           # collar
-    fill(10, 13, 14, 16, IVORY)               # body
-    fill(9, 17, 15, 18, IVORY_DARK)           # base ring
+    # --- the net, slung between the pole tops with a deep sag ---------------
+    for x in range(NET_X0, NET_X1 + 1):
+        y = net_y(x)
+        px[y][x] = NET_LIT if x % 2 == 0 else NET
+        px[y + 1][x] = NET
+        px[y + 2][x] = NET_DARK if (x + y) % 2 == 0 else NET
+        # Loose mesh trailing under the band so it reads as netting.
+        if x % 3 == 1:
+            px[y + 3][x] = NET_DARK
 
-    # --- the rescue net ------------------------------------------------------
-    # Two wooden poles holding it up.
-    fill(2, 20, 3, 26, WOOD)
-    fill(2, 20, 2, 26, WOOD_LIT)
-    fill(3, 25, 3, 26, WOOD_DARK)
-    fill(20, 20, 21, 26, WOOD)
-    fill(21, 20, 21, 26, WOOD_LIT)
-    fill(20, 25, 20, 26, WOOD_DARK)
-
-    # The canvas of the net, sagging a pixel where the pawn will land.
-    for x in range(4, 20):
-        sag = 1 if 8 <= x <= 15 else 0
-        px[21 + sag][x] = NET_LIT if x % 2 == 0 else NET
-        px[22 + sag][x] = NET
-    # Cross-hatch below so it reads as mesh rather than a ribbon.
-    for x in range(5, 19, 3):
-        sag = 1 if 8 <= x <= 15 else 0
-        px[24 + sag][x] = NET
+    # --- the pawn, caught: base buried in the sag, head below the pole tops -
+    disc(14, 10, 3, IVORY)                     # head
+    px[9][12] = IVORY_DARK                     # cheek shade
+    px[10][12] = IVORY_DARK
+    fill(10, 14, 17, 15, IVORY_DARK)           # collar
+    fill(11, 16, 16, 19, IVORY)                # body
+    px[16][11] = IVORY_DARK
+    px[17][11] = IVORY_DARK
+    fill(9, 20, 18, 22, IVORY)                 # base, sunk into the net's dip
+    fill(9, 22, 18, 22, IVORY_DARK)
 
     centre(px)
     add_outline(px)
