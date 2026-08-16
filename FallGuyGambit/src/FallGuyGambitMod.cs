@@ -53,22 +53,22 @@ namespace Gambonanza.FallGuyGambit
         }
 
         /// <summary>
-        /// Crude stand-in used only when fallguy.png is missing: a pawn caught
-        /// in a rescue net slung between two poles. Same 28x32 canvas as the
-        /// vanilla template sprite and inked edge-to-edge like vanilla cards,
-        /// so a missing file does not also change where the card hangs.
+        /// Crude stand-in used only when fallguy.png is missing: the guardian
+        /// angel pawn - halo, stubby wings, nothing underneath. Same canvas
+        /// proportions as the real art so a missing file does not also change
+        /// how the card hangs.
         /// </summary>
         private static Sprite GenerateFallbackSprite()
         {
-            const int w = 28;
-            const int h = 32;
+            const int w = 24;
+            const int h = 26;
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
             var pixels = new Color[w * h];
 
             var ivory = new Color(0.95f, 0.92f, 0.82f, 1f);
             var shade = new Color(0.78f, 0.72f, 0.58f, 1f);
-            var wood = new Color(0.58f, 0.37f, 0.18f, 1f);
-            var net = new Color(0.85f, 0.23f, 0.23f, 1f);
+            var white = new Color(0.97f, 0.95f, 0.91f, 1f);
+            var gold = new Color(0.91f, 0.72f, 0.23f, 1f);
 
             // Texture rows run bottom-up (y=0 is the baseline the card stands on).
             for (var y = 0; y < h; y++)
@@ -77,24 +77,20 @@ namespace Gambonanza.FallGuyGambit
                 {
                     var c = Color.clear;
 
-                    // Two full-height poles with flared feet on the baseline.
-                    if (y <= 1 && (x <= 4 || x >= 23)) c = wood;
-                    else if (y >= 2 && y <= 17 && ((x >= 1 && x <= 3) || (x >= 24 && x <= 26))) c = wood;
+                    // Halo floating above everything.
+                    if (y >= 22 && y <= 24 && x >= 8 && x <= 16 && !(y == 23 && x >= 10 && x <= 14)) c = gold;
 
-                    // The net: a parabola resting on the pole tops (y=17),
-                    // sagging 7 rows in the middle where the pawn sits.
-                    var t = (x - 13.5f) / 9.5f;
-                    var sag = Mathf.RoundToInt(7f * Mathf.Max(0f, 1f - t * t));
-                    var netY = 17 - sag;
-                    if (x >= 4 && x <= 23 && y <= netY && y >= netY - 2) c = net;
+                    // The pawn: wide head, narrow body, flared base.
+                    var dx = x - 12;
+                    var dy = y - 17;
+                    if (dx * dx + dy * dy <= 12) c = ivory;                       // head
+                    else if (y >= 12 && y <= 13 && x >= 9 && x <= 16) c = shade;  // collar
+                    else if (y >= 5 && y <= 11 && x >= 11 && x <= 14) c = ivory;  // body
+                    else if (y >= 1 && y <= 4 && x >= 8 && x <= 17) c = ivory;    // base
 
-                    // The pawn, base sunk into the sag.
-                    if (y >= 9 && y <= 11 && x >= 9 && x <= 18) c = ivory;       // base
-                    else if (y >= 12 && y <= 15 && x >= 11 && x <= 16) c = ivory; // body
-                    else if (y >= 16 && y <= 17 && x >= 10 && x <= 17) c = shade; // collar
-                    var dx = x - 14;
-                    var dy = y - 21;
-                    if (dx * dx + dy * dy <= 10) c = ivory;                      // head
+                    // Wings, flared out from the collar with a gap to the body.
+                    if (y >= 8 && y <= 10 && (x <= 6 || x >= 18)) c = white;
+                    else if (y >= 11 && y <= 13 && ((x >= 3 && x <= 7) || (x >= 17 && x <= 21))) c = white;
 
                     pixels[y * w + x] = c;
                 }

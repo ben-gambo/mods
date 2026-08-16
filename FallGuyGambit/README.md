@@ -78,15 +78,16 @@ death. That is also why the charge is not consumed on that branch.
 
 ## A note on the art
 
-A pawn caught in the sag of a firefighter's rescue net. The geometry comes
-from reading the game's own assets: vanilla gambit sprites are bottom-pivoted
+A guardian-angel pawn: gold halo, stubby white wings, and pointedly nothing
+underneath it - the tile it stood on is already gone. The geometry comes from
+reading the game's own assets: vanilla gambit sprites are bottom-pivoted
 (pivot y=0, PPU 32), so cards STAND on a shared baseline in the gambit rail,
-and vanilla ink fills its canvas edge-to-edge - the template (Addiction,
-28x32) is flush on every side. Art whose mass floats high in a sparse canvas
-reads as a levitating speck next to those dense objects, which is exactly what
-the first draft of this card did.
+and vanilla ink fills its canvas edge-to-edge; the canvases themselves vary
+per card (17x25 up to the 28x32 template). Art whose mass floats in a sparse
+canvas reads as a levitating speck next to those dense objects, which is
+exactly what the first draft of this card did.
 
-So `make_art.py` draws on the template's exact 28x32 canvas, inks it
-edge-to-edge with the composition's weight sitting low, outlines the
-silhouette in a pass, and the card is registered with `WithVisualScale(0.9f)`
-to sit mid-pack among neighbours (the template is the game's largest card).
+So `make_art.py` draws the angel, outlines the silhouette in a pass, then
+crops the canvas to the ink's bounding box - keeping the aspect inside
+GambitApi's 10% tolerance of the template's - and the card is registered with
+`WithVisualScale(0.9f)` to sit mid-pack among its neighbours.
