@@ -72,19 +72,26 @@ jobs:
             cp -R "$mod"/release/. "$staging/$mod/"
             (cd "$staging" && zip -qr "$mod.zip" "$mod")
 
-            notes="$mod/CHANGELOG.md"
-            if [ -f "$notes" ]; then
-              note_args=(--notes-file "$notes")
+            # Notes: a hand-written CHANGELOG.md if the mod has one, otherwise a
+            # generated stub. Built in a file rather than inline, because a
+            # multi-line shell string inside a YAML block scalar has to stay
+            # indented or it silently breaks the workflow file.
+            notes="$staging/notes.md"
+            if [ -f "$mod/CHANGELOG.md" ]; then
+              cp "$mod/CHANGELOG.md" "$notes"
             else
-              note_args=(--notes "$(jq -r '.description // "A Gambonanza mod."' "$manifest")
-
-Unzip into your game's \`Mods/\` folder. Source for this build is in [\`$mod/\`](../../tree/$tag/$mod).")
+              {
+                jq -r '.description // "A Gambonanza mod."' "$manifest"
+                printf '\n'
+                printf 'Unzip into your game'"'"'s `Mods/` folder.\n\n'
+                printf 'Source for this exact build: [`%s/`](../../tree/%s/%s)\n' "$mod" "$tag" "$mod"
+              } > "$notes"
             fi
 
             echo "→ publishing $id $version as $tag"
             gh release create "$tag" "$staging/$mod.zip" \
               --title "$(jq -r '.name // .id' "$manifest") $version" \
-              "${note_args[@]}" \
+              --notes-file "$notes" \
               --latest=false
             published=$((published + 1))
           done
