@@ -138,23 +138,44 @@ def add_outline(px):
                     break
 
 
+# GambitApi copies the template sprite's pivot onto the rebuilt mod sprite as
+# a fraction of the canvas, and the current template (SPR_Addiction, first in
+# the library) carries a hand-tuned pivot of x=0.45 - NOT 0.5. The engine puts
+# that pivot at the rail slot's centre, so ink centred in its canvas hangs
+# visibly right of where vanilla cards sit. The crop below places the ink's
+# centre on the 0.45 line instead.
+TEMPLATE_PIVOT_X = 0.45
+
+
 def crop(px):
-    """Trim the canvas to the ink, then pad: 2 transparent rows on top and 1
-    column on each side, bottom flush.
+    """Trim the canvas to the ink, then pad: 2 transparent rows on top,
+    asymmetric columns on the sides, bottom flush.
 
     Vanilla sprites live in a packed atlas whose padding gives the green
     highlight-outline shader room to draw outside the ink on every edge; a
     standalone texture has no such slack, and ink flush to the texture top
     visibly clips that outline in-game. The bottom stays flush because the
     bottom-pivoted sprite stands on the rail baseline - padding there would
-    float the card."""
+    float the card. The side padding is asymmetric so the ink's centre lands
+    on the template's x-pivot line (see TEMPLATE_PIVOT_X above)."""
     xs = [x for y in range(H) for x in range(W) if px[y][x][3] > 0]
     ys = [y for y in range(H) for x in range(W) if px[y][x][3] > 0]
     tight = [row[min(xs):max(xs) + 1] for row in px[min(ys):max(ys) + 1]]
     w = len(tight[0])
-    padded = [[CLEAR] * (w + 2) for _ in range(2)]
+
+    left = 1
+    ink_centre = left + (w - 1) / 2
+    best_right, best_err = 1, float("inf")
+    for right in range(1, 5):
+        err = abs(ink_centre - TEMPLATE_PIVOT_X * (w + left + right))
+        if err < best_err:
+            best_right, best_err = right, err
+    print(f"side padding: left {left}, right {best_right} "
+          f"(ink centre {best_err:+.2f}px off the pivot line)")
+
+    padded = [[CLEAR] * (w + left + best_right) for _ in range(2)]
     for row in tight:
-        padded.append([CLEAR] + row + [CLEAR])
+        padded.append([CLEAR] * left + row + [CLEAR] * best_right)
     return padded
 
 

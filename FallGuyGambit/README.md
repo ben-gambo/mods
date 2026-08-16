@@ -89,10 +89,14 @@ exactly what the first draft of this card did.
 
 So `make_art.py` draws the angel slim (the rail's vanilla cards run 17-22px
 wide, not the 28px template), outlines the silhouette in a pass, crops the
-canvas to the ink, then pads it: two transparent rows on top and one column
-per side, bottom flush. Vanilla sprites sit in a packed atlas whose padding
-gives the green highlight-outline room on every edge; a standalone texture
-has none, and ink flush to the texture top visibly clips that outline
-in-game. The bottom stays flush because the bottom-pivoted sprite stands on
-the rail baseline. Registered with `WithVisualScale(0.9f)`, the visible ink
-lands at Warlock-class world size (~1.0 x 1.25 units).
+canvas to the ink, then pads it: two transparent rows on top, asymmetric
+columns on the sides, bottom flush. Vanilla sprites sit in a packed atlas
+whose padding gives the green highlight-outline room on every edge; a
+standalone texture has none, and ink flush to the texture top visibly clips
+that outline in-game. The bottom stays flush because the bottom-pivoted
+sprite stands on the rail baseline. The side padding is asymmetric because
+GambitApi copies the template's pivot onto the rebuilt sprite, and the
+template's pivot is x=0.45 - centred ink therefore hangs visibly right of
+the slot, so the crop puts the ink's centre on the 0.45 line instead.
+Registered with `WithVisualScale(0.9f)`, the visible ink lands at
+Warlock-class world size (~1.0 x 1.25 units).
