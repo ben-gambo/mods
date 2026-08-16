@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared settings and the GambonanzaModsDir / GambonanzaRefs lookup live in
+       ../Directory.Build.props. Everything here is DLL references rather than
+       project references, so building a mod never builds (or dirties) the
+       framework checkout it points at. -->
+
+  <PropertyGroup>
+    <AssemblyName>Gambonanza.FallGuyGambit</AssemblyName>
+    <RootNamespace>Gambonanza.FallGuyGambit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Gambonanza.ModSdk">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Gambonanza.GambitApi">
+      <HintPath>$(GambonanzaModsDir)/Mods/GambitApi/Gambonanza.GambitApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The rescue slides the piece to its new tile with the game's own
+         DOFollow tween, which returns a DG.Tweening.Tweener. -->
+    <Reference Include="DOTween">
+      <HintPath>$(GambonanzaRefs)/DOTween.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

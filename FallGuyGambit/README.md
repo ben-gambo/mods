@@ -1,0 +1,85 @@
+# Fall Guy
+
+> **Once per game, a piece about to FALL is saved to the nearest free square, or the stash.**
+> **(Nowhere to go? It dies lol)**
+
+When the crumble takes a tile out from under one of your pieces, the first
+such piece each game does not die: it hops to the nearest intact empty square.
+If the whole board is out of squares it is dropped into your stash instead,
+ready to be placed again. If the stash is full too - well, the card told you.
+
+Epic, 8 coins. The charge is only spent when a piece is actually saved; a
+"death lol" leaves the gambit armed for the next fall.
+
+## Install
+
+Unpack the zip from [Releases](../../releases?q=FallGuyGambit) into your
+game's `Mods/` folder:
+
+```
+Gambonanza/Mods/FallGuyGambit/
+├── mod.json
+├── Gambonanza.FallGuyGambit.dll
+└── fallguy.png
+```
+
+Needs the **GambitApi** mod, which ships with the framework. No framework
+update is required - this is an ordinary mod DLL loaded by ModHost. Built and
+played against framework **1.3.3** / game build **24648699**.
+
+## How it works
+
+A crumble death is a race the mod is allowed to win. When a shaking tile
+falls, `CrumbleManager` books the piece into the buy-back graveyard, drops the
+tile, and fires `OnFall` - all in the same frame. The piece itself is only
+destroyed later: `TileVisual.CO_Fall` waits 0.3s and then looks for a victim
+with `GetComponentInChildren<BasePieceBehaviour>()`, because pieces are
+children of their tile.
+
+So the rescue is one move: on `OnFall`, re-parent the piece to safety before
+that delayed lookup runs. The falling tile ends up with no piece-child, the
+destroy path finds nothing, and the piece has simply moved. The graveyard
+entry written a moment earlier is popped again, so a save is not also a free
+buy-back token.
+
+The board branch picks the nearest (world distance) intact, empty,
+non-shaking square - everything still shaking when `OnFall` fires belongs to
+this same crumble batch or the next one, so it is nowhere to leave a piece we
+just saved. The piece's `StartingTile` is left alone: fallen tiles re-appear
+at wave end and the vanilla reset walks the piece back to its own post.
+
+The stash branch is the delicate one, because vanilla never moves a piece
+board-to-stock mid-game:
+
+- **Registration.** `PieceManager`'s white-pieces list is what every
+  lose-check reads, and stock pieces normally are not in it. So the stashed
+  piece is unregistered - unless it was the *last* piece on the board, where
+  an empty list would make both lose-checks call the run dead while the
+  player is holding a perfectly good piece. In that case it stays registered
+  (`TurnManager` skips `InStock` entries anyway), and the duplicate
+  registration vanilla adds when the piece is placed back is removed again.
+- **The turn lock.** With nothing on the board, `TurnManager`'s scan never
+  re-opens input. A short coroutine waits out that scan and, if the player's
+  only pieces are stashed, sets `CanPlay` itself so the piece can be
+  re-placed.
+
+If neither a square nor a stash slot exists, the mod does nothing at all -
+vanilla's fall pipeline is already mid-swing, and doing nothing *is* the
+death. That is also why the charge is not consumed on that branch.
+
+## Files
+
+| Path | |
+| --- | --- |
+| `src/FallGuyGambitMod.cs` | Registers the card - name, art, rarity, price. |
+| `src/GambitFallGuy.cs` | The gameplay: the rescue, in board/stash/lol order. |
+| `tools/make_art.py` | Regenerates `fallguy.png`. Pure stdlib Python 3. |
+| `release/` | The built artefact, committed - see the root README for why. |
+
+## A note on the art
+
+A pawn caught mid-drop above a firefighter's rescue net. Same canvas rules as
+the other cards here: GambitApi scales a modded sprite so its canvas height
+matches the vanilla template's, so `make_art.py` works on a portrait 24x28
+canvas, auto-centres the ink, outlines the silhouette in a pass, and the card
+is registered with `WithVisualScale(0.9f)`.
