@@ -1,0 +1,41 @@
+<Project>
+
+  <!--
+    Every mod here builds against three things that do not live in this repo:
+
+      prebuilt/Gambonanza.ModSdk.dll        the mod API      (committed in GambonanzaMods)
+      Mods/GambitApi/Gambonanza.GambitApi.dll  gambit builder (committed in GambonanzaMods)
+      refs/*.dll                            Unity + the game (NOT committed anywhere)
+
+    The first two ship in a GambonanzaMods checkout. The third is populated
+    from your own installed copy of the game the first time you run its
+    ./build.sh, and is copyrighted by Unity and Blukulele - which is why it is
+    in nobody's repository, and why CI cannot compile these mods. See the
+    root README for how releases work as a result.
+
+    Point GAMBONANZA_MODS_DIR at your checkout, or park this repo beside it.
+  -->
+
+  <PropertyGroup>
+    <GambonanzaModsDir Condition="'$(GambonanzaModsDir)' == '' And '$(GAMBONANZA_MODS_DIR)' != ''">$(GAMBONANZA_MODS_DIR)</GambonanzaModsDir>
+    <GambonanzaModsDir Condition="'$(GambonanzaModsDir)' == ''">$(MSBuildThisFileDirectory)../GambonanzaMods</GambonanzaModsDir>
+    <GambonanzaRefs>$(GambonanzaModsDir)/refs</GambonanzaRefs>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <DebugType>portable</DebugType>
+    <NoWarn>CS0436;CS1701;CS1702</NoWarn>
+  </PropertyGroup>
+
+  <!-- Fail with an explanation rather than fifty "type or namespace not found". -->
+  <Target Name="CheckGambonanzaRefs" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(GambonanzaRefs)/Assembly-CSharp.dll')"
+           Text="No game assemblies at $(GambonanzaRefs). Clone https://github.com/bentrd/GambonanzaMods next to this repo and run its ./build.sh once (it copies them out of your installed game), or set GAMBONANZA_MODS_DIR to an existing checkout." />
+  </Target>
+
+</Project>

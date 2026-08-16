@@ -1,0 +1,95 @@
+# Publishes a GitHub release for any mod whose version has no release yet.
+#
+# This workflow does NOT compile anything, and cannot: mods here build against
+# Gambonanza's own assemblies, which are copyrighted and exist only next to an
+# installed copy of the game. So ./build.sh produces <Mod>/release/ on a machine
+# that has the game, that folder is committed, and this job packages it.
+#
+# The trigger is therefore "a version we have not shipped", not "a tag":
+# bump "version" in <Mod>/mod.json, commit the rebuilt <Mod>/release/, push.
+name: Release mods
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*/mod.json'
+      - '*/release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish every unreleased version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          published=0
+          skipped=0
+
+          for manifest in */release/mod.json; do
+            mod="$(dirname "$(dirname "$manifest")")"
+            id="$(jq -r '.id // empty' "$manifest")"
+            version="$(jq -r '.version // empty' "$manifest")"
+
+            if [ -z "$id" ] || [ -z "$version" ]; then
+              echo "::error file=$manifest::mod.json needs both \"id\" and \"version\""
+              exit 1
+            fi
+
+            # The staged manifest is a copy of the source one; a mismatch means
+            # release/ was committed stale, and shipping it would put a DLL
+            # under a version number it was not built at.
+            source_version="$(jq -r '.version // empty' "$mod/mod.json")"
+            if [ "$version" != "$source_version" ]; then
+              echo "::error file=$mod/mod.json::version is $source_version but $mod/release/ was built at $version - re-run ./build.sh $mod and commit the result"
+              exit 1
+            fi
+
+            if ! ls "$mod"/release/*.dll >/dev/null 2>&1; then
+              echo "::error file=$manifest::$mod/release/ has no .dll in it"
+              exit 1
+            fi
+
+            tag="$id-v$version"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "· $id $version already released ($tag)"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
+            # Players unpack this straight into Gambonanza/Mods/, so the archive
+            # has to contain one folder named exactly as the install folder.
+            staging="$(mktemp -d)"
+            mkdir -p "$staging/$mod"
+            cp -R "$mod"/release/. "$staging/$mod/"
+            (cd "$staging" && zip -qr "$mod.zip" "$mod")
+
+            notes="$mod/CHANGELOG.md"
+            if [ -f "$notes" ]; then
+              note_args=(--notes-file "$notes")
+            else
+              note_args=(--notes "$(jq -r '.description // "A Gambonanza mod."' "$manifest")
+
+Unzip into your game's \`Mods/\` folder. Source for this build is in [\`$mod/\`](../../tree/$tag/$mod).")
+            fi
+
+            echo "→ publishing $id $version as $tag"
+            gh release create "$tag" "$staging/$mod.zip" \
+              --title "$(jq -r '.name // .id' "$manifest") $version" \
+              "${note_args[@]}" \
+              --latest=false
+            published=$((published + 1))
+          done
+
+          echo "published=$published skipped=$skipped" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$published" -eq 0 ]; then
+            echo "Nothing new to release." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,11 @@
+{
+    "id":           "ImpatientGambit",
+    "name":         "Impatient Gambit",
+    "version":      "1.0.0",
+    "author":       "Ben",
+    "entry":        "Gambonanza.ImpatientGambit.ImpatientGambitMod",
+    "enabled":      true,
+    "gameVersion":  ">=1.0",
+    "description":  "Adds the Impatient Gambit: fight only bosses, and earn 4x gold.",
+    "dependencies": ["GambitApi"]
+}

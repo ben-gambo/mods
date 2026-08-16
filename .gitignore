@@ -1,0 +1,7 @@
+# Build intermediates. Note that <Mod>/release/ is deliberately NOT ignored:
+# it is the artefact CI publishes, since CI cannot compile these mods itself.
+bin/
+obj/
+
+.DS_Store
+*.user
