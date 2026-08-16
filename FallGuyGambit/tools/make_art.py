@@ -59,36 +59,39 @@ def build():
                 if (x - cx) ** 2 + (y - cy) ** 2 <= r * r + r / 2:
                     put(x, y, colour)
 
+    # Slim layout: the gambit rail's vanilla cards are narrow silhouettes
+    # (Warlock 21x27, DarkKnight 17x25), so the angel keeps its wings tucked.
+
     # --- the halo, floating on its own above the head -----------------------
-    fill(11, 1, 16, 1, GOLD)
-    put(10, 2, GOLD)
-    put(17, 2, GOLD)
-    fill(12, 2, 15, 2, GOLD_LIT)
-    fill(11, 3, 16, 3, GOLD)
+    fill(10, 1, 15, 1, GOLD)
+    put(9, 2, GOLD)
+    put(16, 2, GOLD)
+    fill(11, 2, 14, 2, GOLD_LIT)
+    fill(10, 3, 15, 3, GOLD)
 
     # --- the pawn -----------------------------------------------------------
-    disc(13.5, 8, 3, IVORY)                  # head (a gap below the halo)
-    put(11, 7, IVORY_DARK)                   # cheek shade
-    put(11, 8, IVORY_DARK)
-    fill(10, 12, 17, 13, IVORY_DARK)         # collar
-    fill(12, 14, 15, 20, IVORY)              # body, narrower than the head
-    put(12, 14, IVORY_DARK)
-    put(12, 15, IVORY_DARK)
-    put(12, 16, IVORY_DARK)
-    fill(9, 21, 18, 24, IVORY)               # base
-    fill(9, 24, 18, 24, IVORY_DARK)
+    disc(12.5, 7, 3, IVORY)                  # head (a gap below the halo)
+    put(10, 6, IVORY_DARK)                   # cheek shade
+    put(10, 7, IVORY_DARK)
+    fill(9, 11, 16, 12, IVORY_DARK)          # collar
+    fill(11, 13, 14, 18, IVORY)              # body, narrower than the head
+    put(11, 13, IVORY_DARK)
+    put(11, 14, IVORY_DARK)
+    put(11, 15, IVORY_DARK)
+    fill(8, 19, 17, 22, IVORY)               # base
+    fill(8, 22, 17, 22, IVORY_DARK)
 
-    # --- the wings: chunky slabs flared up-and-out, one clear pixel away ----
+    # --- the wings: stubby slabs flared up-and-out, one clear pixel away ----
     # from the body so the outline pass draws a dark separator between them.
-    for i in range(4):
-        fill(7 - i, 11 + i, 8 - i, 12 + i, WHITE)
-        fill(19 + i, 11 + i, 20 + i, 12 + i, WHITE)
-    fill(3, 15, 8, 17, WHITE)
-    fill(19, 15, 24, 17, WHITE)
-    fill(4, 16, 8, 16, (0xE4, 0xDD, 0xC8, 255))   # feather seam
-    fill(19, 16, 23, 16, (0xE4, 0xDD, 0xC8, 255))
-    fill(4, 18, 7, 18, DASH)                 # feathered underside
-    fill(20, 18, 23, 18, DASH)
+    for i in range(3):
+        fill(7 - i, 10 + i, 8 - i, 11 + i, WHITE)
+        fill(17 + i, 10 + i, 18 + i, 11 + i, WHITE)
+    fill(4, 13, 8, 15, WHITE)
+    fill(17, 13, 21, 15, WHITE)
+    fill(5, 14, 8, 14, (0xE4, 0xDD, 0xC8, 255))   # feather seam
+    fill(17, 14, 20, 14, (0xE4, 0xDD, 0xC8, 255))
+    fill(5, 16, 8, 16, DASH)                 # feathered underside
+    fill(17, 16, 20, 16, DASH)
 
     centre(px)
     add_outline(px)
@@ -136,11 +139,23 @@ def add_outline(px):
 
 
 def crop(px):
-    """Trim the canvas to the ink so the sprite is bottom-anchored correctly
-    (bottom-pivoted like vanilla, and no dead margin to float on)."""
+    """Trim the canvas to the ink, then pad: 2 transparent rows on top and 1
+    column on each side, bottom flush.
+
+    Vanilla sprites live in a packed atlas whose padding gives the green
+    highlight-outline shader room to draw outside the ink on every edge; a
+    standalone texture has no such slack, and ink flush to the texture top
+    visibly clips that outline in-game. The bottom stays flush because the
+    bottom-pivoted sprite stands on the rail baseline - padding there would
+    float the card."""
     xs = [x for y in range(H) for x in range(W) if px[y][x][3] > 0]
     ys = [y for y in range(H) for x in range(W) if px[y][x][3] > 0]
-    return [row[min(xs):max(xs) + 1] for row in px[min(ys):max(ys) + 1]]
+    tight = [row[min(xs):max(xs) + 1] for row in px[min(ys):max(ys) + 1]]
+    w = len(tight[0])
+    padded = [[CLEAR] * (w + 2) for _ in range(2)]
+    for row in tight:
+        padded.append([CLEAR] + row + [CLEAR])
+    return padded
 
 
 def write_png(path, px):

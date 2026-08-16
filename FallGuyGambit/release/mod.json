@@ -1,7 +1,7 @@
 {
     "id":           "FallGuyGambit",
     "name":         "Fall Guy",
-    "version":      "1.0.2",
+    "version":      "1.0.3",
     "author":       "Ben",
     "entry":        "Gambonanza.FallGuyGambit.FallGuyGambitMod",
     "enabled":      true,
