@@ -15,6 +15,9 @@ on:
     paths:
       - '*/mod.json'
       - '*/release/**'
+      # Without this, edits to this file never run it, so a broken workflow
+      # looks like a passing one until the next mod release quietly fails.
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
