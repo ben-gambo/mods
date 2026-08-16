@@ -22,20 +22,21 @@ namespace Gambonanza.FallGuyGambit
     /// entry the manager just wrote is popped again so the save is not also a
     /// free buy-back token.
     ///
+    /// Every falling piece gets this treatment (there is no per-game limit).
     /// Where the piece goes, in order:
     /// 1. The nearest intact, empty board square (nearest by world distance to the
     ///    tile that fell; shaking tiles are excluded - everything shaking falls in
-    ///    this same batch).
+    ///    this same batch). Rescues within one batch see each other's claims,
+    ///    because the target tile's Piece is set synchronously.
     /// 2. A free stash slot, if the whole board is out of squares.
-    /// 3. Nowhere. It dies lol. (In that case the gambit does nothing at all, so
-    ///    the charge is not spent - it only counts as used when a piece is saved.)
+    /// 3. Nowhere. The vanilla death proceeds untouched.
     ///
     /// The stash branch has two wrinkles, both from the fact that vanilla never
     /// moves a piece board-to-stock mid-game:
     /// - PieceManager's WhitePieces list is what every lose-check reads. If other
     ///   pieces are still standing we unregister the stashed one, mirroring what
-    ///   stock pieces look like everywhere else. But if it was the LAST piece,
-    ///   unregistering would flip both lose-checks (CrumbleManager's and
+    ///   stock pieces look like everywhere else. But if it was the LAST piece
+    ///   standing, unregistering would flip both lose-checks (CrumbleManager's and
     ///   TurnManager's) to "board wiped" - so we leave it registered, remember it,
     ///   and remove the duplicate registration SelectionManager adds when the
     ///   player later places it back. TurnManager already skips InStock entries
@@ -51,11 +52,11 @@ namespace Gambonanza.FallGuyGambit
     /// </summary>
     public class GambitFallGuy : BaseGambit
     {
-        private bool _used;
-
-        // Set only in the last-piece stash branch: the piece we deliberately left
-        // in WhitePieces while it sits in the stash. See OnPiecePlacedInGame.
-        private BasePieceBehaviour _stashedPiece;
+        // Filled only by the last-piece stash branch: pieces we deliberately left
+        // in WhitePieces while they sit in the stash (one crumble batch can stash
+        // several). See OnPiecePlacedInGame.
+        private readonly System.Collections.Generic.HashSet<BasePieceBehaviour> _stashedPieces =
+            new System.Collections.Generic.HashSet<BasePieceBehaviour>();
 
         private void Start()
         {
@@ -88,11 +89,10 @@ namespace Gambonanza.FallGuyGambit
         {
             if (state == State.INGAME || state == State.LOAD_RUN)
             {
-                _used = false;
                 // Every INGAME entry makes PieceManager rebuild WhitePieces from
                 // scratch (stock pieces excluded), which erases the
                 // registered-while-stashed anomaly on its own - stop tracking it.
-                _stashedPiece = null;
+                _stashedPieces.Clear();
             }
         }
 
@@ -101,8 +101,7 @@ namespace Gambonanza.FallGuyGambit
         // that vanilla call is the duplicate - take one of the two back out.
         private void OnPiecePlacedInGame(BasePieceBehaviour piece, TileBehaviour _)
         {
-            if (piece == null || piece != _stashedPiece) return;
-            _stashedPiece = null;
+            if (piece == null || !_stashedPieces.Remove(piece)) return;
             var pm = SingletonMonoBehaviour<PieceManager>.IsCreated() ? SingletonMonoBehaviour<PieceManager>.Instance : null;
             if (pm != null)
                 pm.UnregisterPiece(piece);
@@ -110,7 +109,6 @@ namespace Gambonanza.FallGuyGambit
 
         private void OnTileFell(TileBehaviour fallenTile)
         {
-            if (_used) return;
             if (fallenTile == null) return;
 
             var gm = SingletonMonoBehaviour<GameManager>.IsCreated() ? SingletonMonoBehaviour<GameManager>.Instance : null;
@@ -137,9 +135,8 @@ namespace Gambonanza.FallGuyGambit
                 return;
             }
 
-            // No square, no stash room. It dies lol. Vanilla's fall pipeline is
-            // already mid-swing, so "do nothing" is the death - and since nothing
-            // was saved, the once-per-game charge stays available.
+            // No square, no stash room. Vanilla's fall pipeline is already
+            // mid-swing, so "do nothing" is the death.
             Debug.Log("[FallGuy] No free square, no stash room. It dies lol.");
         }
 
@@ -208,7 +205,6 @@ namespace Gambonanza.FallGuyGambit
 
         private void RescueToTile(BasePieceBehaviour piece, TileBehaviour from, TileBehaviour to)
         {
-            _used = true;
             PopGraveyardEntry(piece);
 
             // Re-parenting is the actual save: TileVisual.CO_Fall's delayed
@@ -234,7 +230,6 @@ namespace Gambonanza.FallGuyGambit
 
         private void RescueToStash(BasePieceBehaviour piece, TileBehaviour from, TileBehaviour place, int slot)
         {
-            _used = true;
             PopGraveyardEntry(piece);
 
             from.Piece = null;
@@ -260,7 +255,7 @@ namespace Gambonanza.FallGuyGambit
                 // the player is holding a perfectly good piece. Leave it
                 // registered (TurnManager skips InStock entries), dedupe on
                 // re-placement, and hand the turn back once vanilla's scan is done.
-                _stashedPiece = piece;
+                _stashedPieces.Add(piece);
                 StartCoroutine(CO_UnstickTurnIfNeeded());
             }
 

@@ -28,11 +28,9 @@ namespace Gambonanza.FallGuyGambit
             var def = GambitBuilder.Create("fallguy")
                 .WithName("Fall Guy's Gambit")
                 // The § marker is the game's wooden colour - the boards' falling
-                // tiles are the wood in question. Two lines, like vanilla cards,
-                // with the user-facing rules in priority order.
+                // tiles are the wood in question.
                 .WithDescription(
-                    "Once per game, a piece about to <color=§>FALL</color> is saved to the nearest free square, or the stash.<br>" +
-                    "<i>(Nowhere to go? It dies lol)</i>")
+                    "Pieces about to <color=§>FALL</color> are saved to the nearest free square, or the stash.")
                 .WithRarity(Rarity.EPIC)
                 .WithFocus(Gambit_Focus.CRUMBLE, Gambit_Focus.UTILITY)
                 // Same price as the other EPIC in the family (Kamikaze): a life

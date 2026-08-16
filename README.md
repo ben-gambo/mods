@@ -9,7 +9,7 @@ artefact that gets released.
 
 | Mod | What it does | Latest |
 | --- | --- | --- |
-| [FallGuyGambit](FallGuyGambit/) | Once per game, a piece about to fall is saved - square, stash, or death lol. | [releases](../../releases?q=FallGuyGambit) |
+| [FallGuyGambit](FallGuyGambit/) | Pieces about to fall are saved - nearest square, or the stash. | [releases](../../releases?q=FallGuyGambit) |
 | [ImpatientGambit](ImpatientGambit/) | Skip every stage straight to its boss, earn 4x gold. | [releases](../../releases?q=ImpatientGambit) |
 
 ## Installing a mod

@@ -1,15 +1,14 @@
 # Fall Guy
 
-> **Once per game, a piece about to FALL is saved to the nearest free square, or the stash.**
-> **(Nowhere to go? It dies lol)**
+> **Pieces about to FALL are saved to the nearest free square, or the stash.**
 
-When the crumble takes a tile out from under one of your pieces, the first
-such piece each game does not die: it hops to the nearest intact empty square.
-If the whole board is out of squares it is dropped into your stash instead,
-ready to be placed again. If the stash is full too - well, the card told you.
+When the crumble takes a tile out from under one of your pieces, the piece
+does not die: it hops to the nearest intact empty square. If the whole board
+is out of squares it is dropped into your stash instead, ready to be placed
+again. Only when the stash is full too does the fall play out as vanilla
+wrote it.
 
-Epic, 8 coins. The charge is only spent when a piece is actually saved; a
-"death lol" leaves the gambit armed for the next fall.
+Epic, 8 coins. Every fall is covered - there is no per-game limit.
 
 ## Install
 
@@ -31,7 +30,8 @@ played against framework **1.3.3** / game build **24648699**.
 
 A crumble death is a race the mod is allowed to win. When a shaking tile
 falls, `CrumbleManager` books the piece into the buy-back graveyard, drops the
-tile, and fires `OnFall` - all in the same frame. The piece itself is only
+tile, and fires `OnFall` - all in the same frame, once per falling tile, so
+every endangered piece gets its own rescue. The piece itself is only
 destroyed later: `TileVisual.CO_Fall` waits 0.3s and then looks for a victim
 with `GetComponentInChildren<BasePieceBehaviour>()`, because pieces are
 children of their tile.
@@ -65,7 +65,7 @@ board-to-stock mid-game:
 
 If neither a square nor a stash slot exists, the mod does nothing at all -
 vanilla's fall pipeline is already mid-swing, and doing nothing *is* the
-death. That is also why the charge is not consumed on that branch.
+death.
 
 ## Files
 
