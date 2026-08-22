@@ -11,6 +11,7 @@ artefact that gets released.
 | --- | --- | --- |
 | [FallGuyGambit](FallGuyGambit/) | Pieces about to fall are saved - nearest square, or the stash. | [releases](../../releases?q=FallGuyGambit) |
 | [ImpatientGambit](ImpatientGambit/) | Skip every stage straight to its boss, earn 4x gold. | [releases](../../releases?q=ImpatientGambit) |
+| [Coop](Coop/) | Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice. | [releases](../../releases?q=Coop) |
 
 ## Installing a mod
 

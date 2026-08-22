@@ -1,0 +1,96 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared settings and the GambonanzaModsDir / GambonanzaRefs lookup live in
+       ../Directory.Build.props. Everything here is DLL references rather than
+       project references, so building a mod never builds (or dirties) the
+       framework checkout it points at. -->
+
+  <PropertyGroup>
+    <AssemblyName>Gambonanza.Coop</AssemblyName>
+    <RootNamespace>Gambonanza.Coop</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Gambonanza.ModSdk">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The board mutations touch colliders and audio sources reachable from the
+         game's own types, so these modules have to be resolvable at compile time. -->
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.Physics2DModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The P1/P2 tile badges are world-space TextMeshPro labels. -->
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(GambonanzaRefs)/Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="DOTween">
+      <HintPath>$(GambonanzaRefs)/DOTween.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Steam lobbies + P2P. Ships with the game; the framework's build.sh copies
+         it into refs/ alongside the Unity assemblies. -->
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(GambonanzaRefs)/com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

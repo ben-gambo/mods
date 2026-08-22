@@ -1,0 +1,11 @@
+{
+    "id":           "Coop",
+    "name":         "Co-op",
+    "version":      "1.0.0",
+    "author":       "Ben",
+    "entry":        "Gambonanza.Coop.CoopMod",
+    "enabled":      true,
+    "gameVersion":  ">=1.0",
+    "description":  "Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice.",
+    "dependencies": []
+}
