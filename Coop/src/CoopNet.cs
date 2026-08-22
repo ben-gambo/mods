@@ -22,6 +22,17 @@ namespace Gambonanza.Coop
         public bool IsHost { get; private set; }
         public bool Connected => PeerId != CSteamID.Nil;
 
+        /// <summary>Steam persona of the connected peer, for the co-op panel.</summary>
+        public string PeerName
+        {
+            get
+            {
+                if (PeerId == CSteamID.Nil) return "";
+                try { return SteamFriends.GetFriendPersonaName(PeerId); }
+                catch { return "your friend"; }
+            }
+        }
+
         public Action<string> OnLog;                       // console/log line
         public Action OnPeerJoined;                        // both sides, once peer known
         public Action OnPeerLeft;

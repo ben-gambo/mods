@@ -54,6 +54,12 @@ namespace Gambonanza.Coop
             if (_remoteBadge) Object.Destroy(_remoteBadge);
             if (_remoteCursor) Object.Destroy(_remoteCursor);
             _localBadge = _remoteBadge = _remoteCursor = null;
+
+            // Runtime sprites and their textures are native objects with no owning asset -
+            // destroying the renderers does not free them, so each disable/enable cycle would
+            // orphan another pair. (_font is a shared game asset: leave it alone.)
+            if (_squareSprite != null) { Object.Destroy(_squareSprite.texture); Object.Destroy(_squareSprite); _squareSprite = null; }
+            if (_dotSprite != null) { Object.Destroy(_dotSprite.texture); Object.Destroy(_dotSprite); _dotSprite = null; }
         }
 
         private GameObject MakeBadge(string name, out SpriteRenderer sr, out TextMeshPro txt)
@@ -139,10 +145,18 @@ namespace Gambonanza.Coop
 
         public void ForgetOwner(BasePieceBehaviour piece)
         {
-            if (piece != null) _owners.Remove(piece);
+            if (piece == null) return;
+            _owners.Remove(piece);
+            _baseColor.Remove(piece);
+            _lastWritten.Remove(piece);
         }
 
-        public void ClearOwners() => _owners.Clear();
+        public void ClearOwners()
+        {
+            _owners.Clear();
+            _baseColor.Clear();
+            _lastWritten.Clear();
+        }
 
         // Per-piece memory of the untinted colour and of what we last wrote, so the tint is
         // idempotent. PieceVisualEffect.Update() normally resets the sprite to white every

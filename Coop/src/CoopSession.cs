@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using Blukulele.CHE;
 using Blukulele.Core;
+using Blukulele.SaveSystem;
 using UnityEngine;
 
 namespace Gambonanza.Coop
@@ -31,8 +32,12 @@ namespace Gambonanza.Coop
         public bool Handshaked { get; private set; }
 
         private bool _applyingRemote;
-        private int _enemyMovesThisRound;
-        private readonly int _enemyMovesTarget = 2;
+        private bool _incompatible;          // sticky: peer failed the handshake
+        private int _enemyTurnsDone;             // enemy turns COMPLETED this round (move or skip)
+        private readonly int _enemyTurnsTarget = 2;
+        private bool _moveSentThisEnemyTurn;     // host: did this enemy turn actually move a piece?
+        private float _enemyPhaseClock;          // watchdog against a stranded enemy phase
+        private bool _gateHoldingLock;
         private float _cursorClock;
         private float _checkClock;
         private TileBehaviour _lastLocalHover;
@@ -45,6 +50,9 @@ namespace Gambonanza.Coop
         private Action<BasePieceBehaviour, TileBehaviour> _selPlaceHandler;
         private Action _hasPlayedHandler;
         private Action<State> _stateHandler;
+        private Action _playerTurnHandler;       // fires on EVERY exit from EnemyManager._Play
+        private Action _waitHandler;             // the in-battle Wait button
+        private Action<PieceType> _promoteIntoHandler;
 
         public CoopSession(CoopNet net, CoopVisuals vis, MonoBehaviour runner)
         {
@@ -109,6 +117,7 @@ namespace Gambonanza.Coop
         {
             if (!_net.Connected) { CoopLog.Warn("no peer connected."); return; }
             if (!_net.IsHost) { CoopLog.Warn("only the host can start the run."); return; }
+            if (!Handshaked || _incompatible) { CoopLog.Warn("peer has not completed a compatible handshake yet."); return; }
 
             var data = DataManager.Instance?.Data;
             if (data == null) { CoopLog.Error("no save data."); return; }
@@ -151,7 +160,7 @@ namespace Gambonanza.Coop
             Phase = Phase.Running;
             Handshaked = true;
             ActiveSeat = 0;
-            _enemyMovesThisRound = 0;
+            _enemyTurnsDone = 0;
             _vis.ClearOwners();
 
             _income.Install();
@@ -174,12 +183,10 @@ namespace Gambonanza.Coop
 
             if (sel != null)
             {
-                _selMoveHandler = OnLocalMove;
-                sel.OnMove = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Combine(sel.OnMove, _selMoveHandler);
-                _selCaptureHandler = OnLocalCapture;
-                sel.OnCapture = (Action<BasePieceBehaviour, BasePieceBehaviour, TileBehaviour>)Delegate.Combine(sel.OnCapture, _selCaptureHandler);
-                _selPlaceHandler = OnLocalPlaceInGame;
-                sel.OnPlacePieceOnBoardInGame = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Combine(sel.OnPlacePieceOnBoardInGame, _selPlaceHandler);
+                // OnPlayerMadeAnActionThatEndsItsTurn is the ONLY signal that fires for every
+                // committed action. OnMove sits in an else-branch that promotion skips
+                // (SelectionManager.cs:823-881), so hooking OnMove would silently drop every
+                // promoting pawn move.
                 _hasPlayedHandler = OnLocalTurnEnded;
                 sel.OnPlayerMadeAnActionThatEndsItsTurn = (Action)Delegate.Combine(sel.OnPlayerMadeAnActionThatEndsItsTurn, _hasPlayedHandler);
             }
@@ -187,6 +194,29 @@ namespace Gambonanza.Coop
             {
                 _enemyMoveHandler = OnEnemyMoved;
                 em.OnMove = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Combine(em.OnMove, _enemyMoveHandler);
+            }
+            var tm = SingletonMonoBehaviour<TurnManager>.Instance;
+            if (tm != null)
+            {
+                // Fires once per completed enemy turn on every path out of _Play - real move,
+                // gambit skip, bribe, demon, or can't-play. Counting OnMove instead would
+                // strand the enemy phase forever whenever a turn was skipped.
+                _playerTurnHandler = OnEnemyTurnCompleted;
+                tm.OnPlayerTurn = (Action)Delegate.Combine(tm.OnPlayerTurn, _playerTurnHandler);
+            }
+            var wm = SingletonMonoBehaviour<WaitManager>.Instance;
+            if (wm != null)
+            {
+                // The Wait button calls TurnManager.EnemyTurn() directly, firing none of the
+                // SelectionManager turn events - without this it bypasses the director.
+                _waitHandler = OnLocalWait;
+                wm.OnWait = (Action)Delegate.Combine(wm.OnWait, _waitHandler);
+            }
+            var pm = SingletonMonoBehaviour<PromotionManager>.Instance;
+            if (pm != null)
+            {
+                _promoteIntoHandler = OnLocalPromoteInto;
+                pm.PromotePlayerInto = (Action<PieceType>)Delegate.Combine(pm.PromotePlayerInto, _promoteIntoHandler);
             }
             if (gm != null)
             {
@@ -200,28 +230,44 @@ namespace Gambonanza.Coop
             var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
             var em = SingletonMonoBehaviour<EnemyManager>.Instance;
             var gm = SingletonMonoBehaviour<GameManager>.Instance;
-            if (sel != null)
-            {
-                if (_selMoveHandler != null) sel.OnMove = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Remove(sel.OnMove, _selMoveHandler);
-                if (_selCaptureHandler != null) sel.OnCapture = (Action<BasePieceBehaviour, BasePieceBehaviour, TileBehaviour>)Delegate.Remove(sel.OnCapture, _selCaptureHandler);
-                if (_selPlaceHandler != null) sel.OnPlacePieceOnBoardInGame = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Remove(sel.OnPlacePieceOnBoardInGame, _selPlaceHandler);
-                if (_hasPlayedHandler != null) sel.OnPlayerMadeAnActionThatEndsItsTurn = (Action)Delegate.Remove(sel.OnPlayerMadeAnActionThatEndsItsTurn, _hasPlayedHandler);
-            }
+            if (sel != null && _hasPlayedHandler != null)
+                sel.OnPlayerMadeAnActionThatEndsItsTurn = (Action)Delegate.Remove(sel.OnPlayerMadeAnActionThatEndsItsTurn, _hasPlayedHandler);
             if (em != null && _enemyMoveHandler != null)
                 em.OnMove = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Remove(em.OnMove, _enemyMoveHandler);
             if (gm != null && _stateHandler != null)
                 gm.onStateChanged = (Action<State>)Delegate.Remove(gm.onStateChanged, _stateHandler);
+            var tmU = SingletonMonoBehaviour<TurnManager>.Instance;
+            if (tmU != null && _playerTurnHandler != null)
+                tmU.OnPlayerTurn = (Action)Delegate.Remove(tmU.OnPlayerTurn, _playerTurnHandler);
+            var wmU = SingletonMonoBehaviour<WaitManager>.Instance;
+            if (wmU != null && _waitHandler != null)
+                wmU.OnWait = (Action)Delegate.Remove(wmU.OnWait, _waitHandler);
+            var pmU = SingletonMonoBehaviour<PromotionManager>.Instance;
+            if (pmU != null && _promoteIntoHandler != null)
+                pmU.PromotePlayerInto = (Action<PieceType>)Delegate.Remove(pmU.PromotePlayerInto, _promoteIntoHandler);
 
             _selMoveHandler = null; _selCaptureHandler = null; _selPlaceHandler = null;
             _hasPlayedHandler = null; _enemyMoveHandler = null; _stateHandler = null;
+            _playerTurnHandler = null; _waitHandler = null; _promoteIntoHandler = null;
         }
 
         private void OnGameStateChanged(State state)
         {
             if (Phase != Phase.Running) return;
+
+            // The game re-enters INGAME on pause/settings/run-info close and after promotion,
+            // none of which are replicated. Every game-side listener guards against exactly
+            // this (TurnManager.cs:80, EnemyManager.cs:97); without the guard, opening the
+            // pause menu would silently rewrite one client's idea of whose turn it is.
+            var gmS = SingletonMonoBehaviour<GameManager>.Instance;
+            if (gmS != null && (gmS.PreviousState == State.PAUSE
+                             || gmS.PreviousState == State.RUN_INFO
+                             || gmS.PreviousState == State.SETTINGS
+                             || gmS.PreviousState == State.PROMOTION)) return;
+
             if (state == State.INGAME)
             {
-                _enemyMovesThisRound = 0;
+                _enemyTurnsDone = 0;
                 ActiveSeat = 0;
                 ClearStaleTurnFlags();
             }
@@ -260,36 +306,8 @@ namespace Gambonanza.Coop
 
         // ---------- local action capture ----------
 
-        private BasePieceBehaviour _pendingCaptureMover;
-
-        private void OnLocalCapture(BasePieceBehaviour mover, BasePieceBehaviour victim, TileBehaviour tile)
-        {
-            if (_applyingRemote) return;
-            _pendingCaptureMover = mover;
-        }
-
-        private void OnLocalMove(BasePieceBehaviour piece, TileBehaviour tile)
-        {
-            if (_applyingRemote || Phase != Phase.Running) return;
-            if (!CoopBoard.TryFindTile(tile, out int toR, out int toC)) return;
-
-            // piece.CurrentTile is already the destination by the time OnMove fires from our
-            // own re-implementation, so send the origin we recorded at pickup time instead.
-            var from = _lastPickupAddress;
-            _vis.SetOwner(piece, LocalSeat);
-            _net.Send(Msg.Make(Msg.Move, LocalSeat, from.kind, from.a, from.b, toR, toC, 0));
-            CoopLog.Debug($"sent move {from.kind}{from.a},{from.b} -> {toR},{toC}");
-        }
-
-        private void OnLocalPlaceInGame(BasePieceBehaviour piece, TileBehaviour tile)
-        {
-            if (_applyingRemote || Phase != Phase.Running) return;
-            if (!CoopBoard.TryFindTile(tile, out int toR, out int toC)) return;
-            _vis.SetOwner(piece, LocalSeat);
-            _net.Send(Msg.Make(Msg.Drop, LocalSeat, _lastPickupAddress.a, toR, toC));
-        }
-
         private (char kind, int a, int b) _lastPickupAddress = (CoopBoard.KindNone, -1, -1);
+        private bool _awaitingLocalPromotion;
 
         public void NotePickup(BasePieceBehaviour piece)
         {
@@ -298,20 +316,83 @@ namespace Gambonanza.Coop
                 _lastPickupAddress = (k, a, b);
         }
 
+        /// <summary>
+        /// The single detection point for a committed local action.
+        /// SelectionManager fires OnPlayerMadeAnActionThatEndsItsTurn (SelectionManager.cs:893)
+        /// for EVERY committed action, whereas OnMove (:879) sits in an else-branch that a
+        /// promoting pawn skips entirely - hooking OnMove would silently drop those moves and
+        /// desync the boards for the rest of the run.
+        /// </summary>
         private void OnLocalTurnEnded()
         {
             if (_applyingRemote || Phase != Phase.Running) return;
-            AdvanceTurnAfterPlayerMove(local: true);
+
+            var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
+            var piece = sel != null ? sel.CurrentPiece : null;      // cleanup runs after this event
+            var dest = piece != null ? piece.CurrentTile : null;
+
+            if (piece != null && dest != null && CoopBoard.TryFindTile(dest, out int toR, out int toC))
+            {
+                _vis.SetOwner(piece, LocalSeat);
+                var from = _lastPickupAddress;
+
+                bool promoting = dest.IsEnd
+                                 && dest.PromoteColor == PieceColor.WHITE
+                                 && piece.PieceHierarchy == PieceHierarchy.PAWN;
+
+                if (from.kind == CoopBoard.KindStock)
+                    _net.Send(Msg.Make(Msg.Drop, LocalSeat, from.a, toR, toC));
+                else
+                    _net.Send(Msg.Make(Msg.Move, LocalSeat, from.kind, from.a, from.b, toR, toC, promoting ? 1 : 0));
+
+                CoopLog.Debug($"sent action {from.kind}{from.a},{from.b} -> {toR},{toC} promo={promoting}");
+
+                if (promoting)
+                {
+                    // The promotion choice arrives separately via PromotePlayerInto. The peer
+                    // holds the turn until it lands, because PromotionManager.Promote runs its
+                    // own GameManager.InGame() + TurnManager.EnemyTurn() on both sides.
+                    _awaitingLocalPromotion = true;
+                    return;
+                }
+            }
+
+            AdvanceTurnAfterPlayerAction();
+        }
+
+        /// <summary>The local player picked a promotion piece; mirror the choice.</summary>
+        private void OnLocalPromoteInto(PieceType type)
+        {
+            if (_applyingRemote || Phase != Phase.Running) return;
+            _net.Send(Msg.Make(Msg.Promo, (int)type));
+            CoopLog.Debug($"sent promotion choice {type}");
+            _awaitingLocalPromotion = false;
+            // Promote() itself calls TurnManager.EnemyTurn(), so the enemy phase is already
+            // under way; just record whose round it is.
+            AdvanceTurnAfterPlayerAction(promotionDriven: true);
+        }
+
+        /// <summary>
+        /// The Wait button calls TurnManager.EnemyTurn() directly (WaitManager.cs:143) and
+        /// fires none of the SelectionManager turn events, so without this hook it would
+        /// bypass the director entirely and let the guest run its own enemy AI.
+        /// </summary>
+        private void OnLocalWait()
+        {
+            if (_applyingRemote || Phase != Phase.Running) return;
+            _net.Send(Msg.Make(Msg.Wait, LocalSeat));
+            CoopLog.Debug("sent wait");
+            AdvanceTurnAfterPlayerAction();
         }
 
         // ---------- turn director ----------
 
         /// <summary>
-        /// The game unconditionally runs an enemy turn after every player move. We ride that:
-        /// after P1's move we make the enemy skip silently so P2 gets the next window; after
-        /// P2's move we let the real enemy play, and FinalBossSkip gives it its second move.
+        /// The game runs an enemy turn after every player action. We ride that: after P1 acts
+        /// we make the enemy skip silently so P2 gets the next window; after P2 acts the enemy
+        /// really plays, and FinalBossSkip buys it a second move.
         /// </summary>
-        private void AdvanceTurnAfterPlayerMove(bool local)
+        private void AdvanceTurnAfterPlayerAction(bool promotionDriven = false)
         {
             var em = SingletonMonoBehaviour<EnemyManager>.Instance;
             var tm = SingletonMonoBehaviour<TurnManager>.Instance;
@@ -319,29 +400,27 @@ namespace Gambonanza.Coop
 
             if (ActiveSeat == 0)
             {
-                // hand the round to P2: suppress this enemy turn entirely
                 ActiveSeat = 1;
-                em.SkipTurnSilentNoEvents();
+                if (!promotionDriven) em.SkipTurnSilentNoEvents();
                 CoopLog.Debug("turn -> P2 (enemy turn suppressed)");
             }
             else
             {
-                // P2 done: the enemy now plays twice.
                 ActiveSeat = -1;                 // nobody's turn while the enemy acts
-                _enemyMovesThisRound = 0;
+                _enemyTurnsDone = 0;
+                _moveSentThisEnemyTurn = false;
+                _enemyPhaseClock = 0f;
 
                 if (_net.IsHost)
                 {
-                    // Host owns the AI (it uses unseeded UnityEngine.Random, so it can't be
-                    // reproduced remotely). FinalBossSkip makes PlayerCanPlay re-enter
-                    // NextTurn once, which is the game's own double-enemy-turn mechanism.
+                    // Host owns the AI - its move selection uses unseeded UnityEngine.Random,
+                    // so it cannot be reproduced remotely. FinalBossSkip makes PlayerCanPlay
+                    // re-enter NextTurn once: the game's own double-enemy-turn mechanism.
                     tm.FinalBossSkip = true;
                     CoopLog.Debug("turn -> enemy x2 (host authoritative)");
                 }
                 else
                 {
-                    // Guest must NOT run its own AI or it would pick a different move.
-                    // Suppress locally and wait for the host's EMOVE messages.
                     em.SkipTurnSilentNoEvents();
                     CoopLog.Debug("turn -> enemy x2 (guest awaits host moves)");
                 }
@@ -351,7 +430,6 @@ namespace Gambonanza.Coop
         private void OnEnemyMoved(BasePieceBehaviour piece, TileBehaviour tile)
         {
             if (Phase != Phase.Running) return;
-            _enemyMovesThisRound++;
 
             if (_net.IsHost && !_applyingRemote)
             {
@@ -360,14 +438,60 @@ namespace Gambonanza.Coop
                     CoopBoard.TryFindTile(tile, out int tr, out int tc))
                 {
                     _net.Send(Msg.Make(Msg.EnemyMove, fr, fc, tr, tc));
+                    _moveSentThisEnemyTurn = true;
                     CoopLog.Debug($"sent enemy move {fr},{fc} -> {tr},{tc}");
                 }
             }
+        }
 
-            if (_enemyMovesThisRound >= _enemyMovesTarget)
+        /// <summary>
+        /// Fires once per COMPLETED enemy turn, on every path out of EnemyManager._Play -
+        /// a real move, a gambit skip, a bribe, a demon skip, or can't-play. Counting
+        /// EnemyManager.OnMove instead would strand the enemy phase forever the moment a turn
+        /// was skipped (gambits like Banana Peel, Fork and Mime all call SkipTurn), holding
+        /// CanMove false on both clients - an unrecoverable soft-lock.
+        /// </summary>
+        private void OnEnemyTurnCompleted()
+        {
+            if (Phase != Phase.Running || ActiveSeat != -1) return;
+
+            if (_net.IsHost && !_moveSentThisEnemyTurn)
+                _net.Send(Msg.Make(Msg.EnemySkip, "skip"));   // keep the guest's count in step
+            _moveSentThisEnemyTurn = false;
+
+            CountEnemyTurn();
+        }
+
+        private void CountEnemyTurn()
+        {
+            _enemyTurnsDone++;
+            _enemyPhaseClock = 0f;
+            if (_enemyTurnsDone >= _enemyTurnsTarget)
             {
-                ActiveSeat = 0;                  // back to P1
-                CoopLog.Debug("enemy done -> P1");
+                ActiveSeat = 0;
+                CoopLog.Debug("enemy phase done -> P1");
+            }
+        }
+
+        /// <summary>
+        /// Last-resort recovery. If the enemy phase somehow never completes but the game has
+        /// already handed input back, restore the round rather than leave both players locked
+        /// out with no way forward.
+        /// </summary>
+        private void TickEnemyPhaseWatchdog()
+        {
+            if (Phase != Phase.Running || ActiveSeat != -1) return;
+            var tm = SingletonMonoBehaviour<TurnManager>.Instance;
+            var gm = SingletonMonoBehaviour<GameManager>.Instance;
+            if (tm == null || gm == null || gm.CurrentState != State.INGAME) { _enemyPhaseClock = 0f; return; }
+            if (!tm.CanPlay) { _enemyPhaseClock = 0f; return; }
+
+            _enemyPhaseClock += Time.unscaledDeltaTime;
+            if (_enemyPhaseClock > 3f)
+            {
+                _enemyPhaseClock = 0f;
+                ActiveSeat = 0;
+                CoopLog.Warn("enemy phase stalled - restoring the round to P1.");
             }
         }
 
@@ -387,10 +511,15 @@ namespace Gambonanza.Coop
             {
                 if (sel.CurrentPiece != null) sel.ForceRelease();
                 sel.CanMove = false;
+                _gateHoldingLock = true;
             }
-            else if (inBattle && mine)
+            else if (_gateHoldingLock)
             {
+                // Only release OUR lock, and only once. Writing CanMove=true every frame would
+                // stomp the game's own mid-battle lockouts (ComputerPowerGlitch, chaos mode),
+                // which legitimately hold input away for over a second.
                 sel.CanMove = true;
+                _gateHoldingLock = false;
             }
         }
 
@@ -406,6 +535,7 @@ namespace Gambonanza.Coop
         {
             if (Phase == Phase.Idle) return;
             TickInputGate();
+            TickEnemyPhaseWatchdog();
             TickCursor();
             TickChecksum();
             TickLocalBadge();
@@ -480,6 +610,9 @@ namespace Gambonanza.Coop
         {
             var p = Msg.Split(payload);
             if (p.Length == 0) return;
+            // A peer that failed the handshake must not be able to drive this client.
+            if (_incompatible && p[0] != Msg.Bye) return;
+            if (!Handshaked && p[0] != Msg.Hello && p[0] != Msg.HelloAck && p[0] != Msg.Bye) return;
             try
             {
                 switch (p[0])
@@ -499,6 +632,15 @@ namespace Gambonanza.Coop
                         break;
                     case Msg.EnemyMove:
                         HandleRemoteEnemyMove(p);
+                        break;
+                    case Msg.EnemySkip:
+                        if (!_net.IsHost && ActiveSeat == -1) CountEnemyTurn();
+                        break;
+                    case Msg.Promo:
+                        HandleRemotePromotion(p);
+                        break;
+                    case Msg.Wait:
+                        HandleRemoteWait();
                         break;
                     case Msg.Buy:
                         _shop.ApplyBuy(Msg.I(p, 1));
@@ -527,7 +669,9 @@ namespace Gambonanza.Coop
             if (proto != ProtocolVersion)
             {
                 CoopLog.Error($"protocol mismatch: peer speaks {proto}, we speak {ProtocolVersion}. Update the Co-op mod on both machines.");
+                _incompatible = true;
                 EndSession(restoreSave: false);
+                _net.LeaveLobby();
                 return;
             }
             if (mod != CoopMod.ModVersion)
@@ -574,15 +718,26 @@ namespace Gambonanza.Coop
                 return;
             }
 
+            bool promoting = Msg.I(p, 7) == 1;
+
             _applyingRemote = true;
             try
             {
                 _vis.SetOwner(piece, seat);
-                CoopBoard.ApplyInGameMove(piece, target, fireTurnEvents: true);
+                CoopBoard.ApplyInGameMove(piece, target, fireTurnEvents: !promoting);
             }
             finally { _applyingRemote = false; }
 
-            AdvanceTurnAfterPlayerMove(local: false);
+            if (promoting)
+            {
+                // Hold the round until the peer's chosen piece type arrives.
+                _pendingRemotePromotion = piece;
+                _pendingRemotePromotionTile = target;
+                CoopLog.Debug("remote pawn promoting - awaiting choice");
+                return;
+            }
+
+            AdvanceTurnAfterPlayerAction();
         }
 
         private void HandleRemoteDrop(string[] p)
@@ -605,7 +760,42 @@ namespace Gambonanza.Coop
             }
             finally { _applyingRemote = false; }
 
-            AdvanceTurnAfterPlayerMove(local: false);
+            AdvanceTurnAfterPlayerAction();
+        }
+
+        /// <summary>Mirrors the peer's promotion choice through the game's own promote path.</summary>
+        private void HandleRemotePromotion(string[] p)
+        {
+            var type = (PieceType)Msg.I(p, 1);
+            var pm = SingletonMonoBehaviour<PromotionManager>.Instance;
+            if (pm == null) { CoopLog.Warn("promotion: no PromotionManager"); return; }
+            if (_pendingRemotePromotion == null)
+            {
+                CoopLog.Warn("promotion arrived with no pawn waiting - possible desync.");
+                return;
+            }
+            _applyingRemote = true;
+            try
+            {
+                pm.Initialize(_pendingRemotePromotion, _pendingRemotePromotionTile);
+                pm.Promote(type);   // also runs GameManager.InGame() + TurnManager.EnemyTurn()
+                CoopLog.Debug($"applied remote promotion to {type}");
+            }
+            catch (Exception ex) { CoopLog.Error($"promotion replay failed: {ex.Message}"); }
+            finally { _applyingRemote = false; _pendingRemotePromotion = null; _pendingRemotePromotionTile = null; }
+
+            AdvanceTurnAfterPlayerAction(promotionDriven: true);
+        }
+
+        private BasePieceBehaviour _pendingRemotePromotion;
+        private TileBehaviour _pendingRemotePromotionTile;
+
+        private void HandleRemoteWait()
+        {
+            var em = SingletonMonoBehaviour<EnemyManager>.Instance;
+            // Mirror the peer's Wait: our own client must not run its enemy AI for it.
+            if (!_net.IsHost && em != null) em.SkipTurnSilentNoEvents();
+            AdvanceTurnAfterPlayerAction();
         }
 
         private void HandleRemoteEnemyMove(string[] p)
@@ -653,7 +843,22 @@ namespace Gambonanza.Coop
             {
                 var path = Application.persistentDataPath + "/save.json";
                 System.IO.File.WriteAllText(path, _saveSnapshot);
-                CoopLog.Info("your solo save was restored (co-op runs never overwrite it). Restart the game to reload it.");
+
+                // Restoring the file alone is not enough: DataManager still holds the Data
+                // object the co-op run mutated, and the game re-Stores it after every turn and
+                // on every state change (SaveManager.cs:19-24) - which would immediately
+                // overwrite the file we just put back. Reload it into memory as well.
+                var reloaded = Save.Load<Data>();
+                if (reloaded != null)
+                {
+                    DataManager.Instance.Data = reloaded;
+                    Save.Store(reloaded);
+                    CoopLog.Info("your solo save was restored, in memory and on disk.");
+                }
+                else
+                {
+                    CoopLog.Warn("solo save file restored, but reloading it failed - restart before playing solo.");
+                }
             }
             catch (Exception ex) { CoopLog.Error($"could not restore save: {ex.Message}"); }
             finally { _saveSnapshot = null; }
@@ -664,7 +869,7 @@ namespace Gambonanza.Coop
             if (Phase == Phase.Idle) return "co-op: idle";
             string seat = LocalSeat == 0 ? "P1 (red, host)" : "P2 (blue, guest)";
             string turn = ActiveSeat < 0 ? "enemy" : (ActiveSeat == 0 ? "P1" : "P2");
-            return $"co-op: {Phase}, you are {seat}, peer={(_net.Connected ? "connected" : "none")}, turn={turn}, enemyMoves={_enemyMovesThisRound}/{_enemyMovesTarget}";
+            return $"co-op: {Phase}, you are {seat}, peer={(_net.Connected ? "connected" : "none")}, turn={turn}, enemyTurns={_enemyTurnsDone}/{_enemyTurnsTarget}";
         }
     }
 }

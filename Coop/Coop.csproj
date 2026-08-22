@@ -15,6 +15,11 @@
       <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Pixel/Modal build the CO-OP home-menu button and panel. Ships in Managed/. -->
+    <Reference Include="Gambonanza.GameUI">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.GameUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

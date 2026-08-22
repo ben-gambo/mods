@@ -94,7 +94,14 @@ namespace Gambonanza.Coop
         public void Tick()
         {
             var gm = SingletonMonoBehaviour<GameManager>.Instance;
-            if (gm == null || gm.CurrentState != State.SHOP)
+            if (gm == null) return;
+            // TokenToBuy.OnClick switches to GACHAPON/WHEEL_GAME/PACHINKO *before* it sets
+            // m_Used (TokenToBuy.cs:200-219), so a SHOP-only gate would miss every token buy.
+            bool shopContext = gm.CurrentState == State.SHOP
+                            || gm.CurrentState == State.GACHAPON
+                            || gm.CurrentState == State.WHEEL_GAME
+                            || gm.CurrentState == State.PACHINKO;
+            if (!shopContext)
             {
                 if (_tracking) ResetTracking();
                 return;
@@ -174,8 +181,10 @@ namespace Gambonanza.Coop
                     int idx = slotIndex - 10;
                     if (list != null && idx >= 0 && idx < list.Count && list[idx] != null)
                     {
-                        list[idx].OnClick();
-                        if (idx < _seenToken.Length) _seenToken[idx] = true;
+                        var item = list[idx];
+                        item.OnClick();
+                        if (item.Used) { if (idx < _seenToken.Length) _seenToken[idx] = true; }
+                        else CoopLog.Warn($"DESYNC RISK: peer bought token slot {idx} but it was refused here (coins).");
                     }
                     else CoopLog.Warn($"shop buy: token slot {idx} unavailable");
                 }
@@ -184,8 +193,13 @@ namespace Gambonanza.Coop
                     var list = Gambits(canvas);
                     if (list != null && slotIndex >= 0 && slotIndex < list.Count && list[slotIndex] != null)
                     {
-                        list[slotIndex].OnClick();
-                        if (slotIndex < _seenGambit.Length) _seenGambit[slotIndex] = true;
+                        var item = list[slotIndex];
+                        item.OnClick();
+                        // OnClick no-ops silently when the wallet is short or the gambit bar is
+                        // full (GambitToBuy.cs:353,358). Latching the slot regardless would
+                        // hide a permanent inventory/coin divergence.
+                        if (item.Bought) { if (slotIndex < _seenGambit.Length) _seenGambit[slotIndex] = true; }
+                        else CoopLog.Warn($"DESYNC RISK: peer bought gambit slot {slotIndex} but it was refused here (coins/space).");
                     }
                     else CoopLog.Warn($"shop buy: gambit slot {slotIndex} unavailable");
                 }
@@ -195,8 +209,10 @@ namespace Gambonanza.Coop
                     int idx = slotIndex - 2;
                     if (list != null && idx >= 0 && idx < list.Count && list[idx] != null)
                     {
-                        list[idx].OnClick();
-                        if (idx < _seenPiece.Length) _seenPiece[idx] = true;
+                        var item = list[idx];
+                        item.OnClick();
+                        if (item.Bought) { if (idx < _seenPiece.Length) _seenPiece[idx] = true; }
+                        else CoopLog.Warn($"DESYNC RISK: peer bought piece slot {idx} but it was refused here (coins/piece cap).");
                     }
                     else CoopLog.Warn($"shop buy: piece slot {idx} unavailable");
                 }

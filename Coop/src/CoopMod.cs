@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "1.0.0";
+        public const string ModVersion = "0.0.1";
 
         private IModContext _context;
         private CoopRunner _runner;
@@ -24,7 +24,7 @@ namespace Gambonanza.Coop
         {
             _context = context;
             CoopLog.Console = context?.Console;
-            context?.LogLine($"co-op v{ModVersion} loaded. Type 'coop' in the console for commands.");
+            context?.LogLine($"co-op v{ModVersion} loaded. Use the CO-OP button in the main menu.");
         }
 
         public void OnEnable()
@@ -56,7 +56,7 @@ namespace Gambonanza.Coop
             var c = _context?.Console;
             if (c == null) return;
 
-            c.RegisterCommand("coop", "co-op: host | join <lobbyId> | invite | start | status | leave | verbose",
+            c.RegisterCommand("coop", "co-op: menu | host | join <lobbyId> | invite | start | status | leave | verbose",
                 args =>
                 {
                     if (_runner == null) { c.PrintError("co-op runner is not active."); return; }
@@ -78,6 +78,9 @@ namespace Gambonanza.Coop
                         case "start":
                             _runner.Session.HostStartRun();
                             break;
+                        case "menu":
+                            _runner.OpenMenu();
+                            break;
                         case "status":
                             c.PrintInfo(_runner.Session.Status());
                             break;
@@ -95,12 +98,13 @@ namespace Gambonanza.Coop
                     }
                 },
                 (args, idx) => idx == 0
-                    ? new[] { "host", "join", "invite", "start", "status", "leave", "verbose" }
+                    ? new[] { "menu", "host", "join", "invite", "start", "status", "leave", "verbose" }
                     : Array.Empty<string>());
         }
 
         private static void PrintHelp(IConsoleApi c)
         {
+            c.PrintInfo("coop menu            - open the co-op panel (also the CO-OP button in the main menu)");
             c.PrintInfo("coop host            - create a friends-only Steam lobby");
             c.PrintInfo("coop invite          - open the Steam invite overlay");
             c.PrintInfo("coop join <lobbyId>  - join by id (accepting an invite works too)");
@@ -119,6 +123,7 @@ namespace Gambonanza.Coop
         public CoopNet Net { get; private set; }
         public CoopSession Session { get; private set; }
         private CoopVisuals _visuals;
+        private CoopMenu _menu;
         private Action<BasePieceBehaviour> _selectHandler;
         private bool _hookedSelect;
 
@@ -129,6 +134,7 @@ namespace Gambonanza.Coop
 
             Net = new CoopNet { OnLog = CoopLog.Info };
             Session = new CoopSession(Net, _visuals, this);
+            _menu = new CoopMenu(Net, Session);
             Net.Install();
 
             // Diagnostic: GAMBONANZA_COOP_AUTOHOST=1 creates a lobby at boot so the Steam
@@ -155,6 +161,7 @@ namespace Gambonanza.Coop
             Net?.EnsureInstalled();
             Net?.Pump();
             Session?.Tick();
+            _menu?.Tick();
             HookSelectionOnce();
         }
 
@@ -175,6 +182,8 @@ namespace Gambonanza.Coop
             _hookedSelect = true;
         }
 
+        public void OpenMenu() => _menu?.Open();
+
         public void TearDown()
         {
             var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
@@ -183,6 +192,7 @@ namespace Gambonanza.Coop
             _selectHandler = null;
             _hookedSelect = false;
 
+            _menu?.Teardown();
             Session?.EndSession(restoreSave: true);
             Net?.Teardown();
             _visuals?.Teardown();

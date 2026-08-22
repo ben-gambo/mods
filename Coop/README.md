@@ -1,4 +1,4 @@
-# Co-op
+# Co-op  *(beta)*
 
 Two players, one board, over Steam. No server, no port forwarding, no accounts —
 it rides the Steam relay network the game is already connected to.
@@ -6,25 +6,31 @@ it rides the Steam relay network the game is already connected to.
 One player hosts, the other joins. You share the board and the shop; you each
 own your own pieces. **P1 is red, P2 is blue.**
 
+> **This is a beta (0.0.1).** The Steam connection, the shared shop and the turn
+> flow all work, but two-player sessions have had limited real-world testing.
+> Expect rough edges, and see *Known limits* below.
+
 ## Playing
 
 Both players need the mod installed and the game launched **through Steam**.
 
-Open the mod console (`` ` `` or `F10`) and:
+Press **CO-OP** in the main menu, next to Play. Everything lives in that panel:
 
-| Command | What it does |
-| --- | --- |
-| `coop host` | create a friends-only Steam lobby |
-| `coop invite` | open the Steam invite overlay |
-| `coop join <lobbyId>` | join by id — accepting a Steam invite works too |
-| `coop start` | **host only:** begin a synced run |
-| `coop status` | show seat, peer, whose turn it is |
-| `coop leave` | end the session and restore your solo save |
-| `coop verbose` | toggle detailed logging |
+1. **Host a game** — creates a friends-only Steam lobby.
+2. **Invite a friend** — opens the Steam invite overlay. (They can also just
+   accept an invite from their friends list; joining is automatic.)
+3. **Start the run** — host only, once both of you are in.
+4. **Leave** — ends the session and restores your solo save.
 
-The usual flow is: host runs `coop host`, then `coop invite` and picks a friend
-in the Steam overlay. Once they accept, both see `peer connected`, and the host
-runs `coop start`.
+The panel shows which seat you are, who you are playing with, and what to do
+next.
+
+<details>
+<summary>Console commands (optional)</summary>
+
+`coop menu` · `coop host` · `coop invite` · `coop join <lobbyId>` ·
+`coop start` · `coop status` · `coop leave` · `coop verbose`
+</details>
 
 ## How a round plays
 
@@ -80,14 +86,20 @@ the session ends (`coop leave`, or the peer disconnecting).
 
 Restart the game after a co-op session to reload the restored save.
 
-## Limits
+## Known limits
 
 - Two players. The lobby is capped at 2.
 - Both sides need the same mod version and the same game build; mismatches are
-  reported at handshake.
+  refused at handshake.
+- **Token minigames** (gachapon, wheel, pachinko) are not mirrored. The purchase
+  itself syncs, so both of you spend the same coins and enter the same minigame,
+  but you each make your own picks and the outcomes can differ. Treat tokens as
+  unsupported for now.
 - Twitch chaos mode is not supported.
-- Gambit *placement* is not mirrored yet — buying is, and buying is what
-  activates a gambit, so this only affects rearranging slots by hand.
+- Gambit *placement* is not mirrored — buying is, and buying is what activates a
+  gambit, so this only affects rearranging slots by hand.
+- If the two boards ever diverge you get a `DESYNC` warning in the console.
+  `coop leave` and restart the run.
 
 ## Diagnostics
 
