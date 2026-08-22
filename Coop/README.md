@@ -6,7 +6,7 @@ it rides the Steam relay network the game is already connected to.
 One player hosts, the other joins. You share the board and the shop; you each
 own your own pieces. **P1 is red, P2 is blue.**
 
-> **This is a beta (0.0.1).** The Steam connection, the shared shop and the turn
+> **This is a beta.** The Steam connection, the shared shop and the turn
 > flow all work, but two-player sessions have had limited real-world testing.
 > Expect rough edges, and see *Known limits* below.
 

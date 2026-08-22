@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using Blukulele.CHE;
 using Blukulele.Core;
-using Gambonanza.GameUI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,9 +8,10 @@ using UnityEngine.UI;
 namespace Gambonanza.Coop
 {
     /// <summary>
-    /// The whole mod driven from the home menu: a "CO-OP" button next to Play that opens a
-    /// panel with host / invite / start / leave and a live status line. The console commands
-    /// still work, but nobody should have to use them.
+    /// The whole mod driven from the home menu: a CO-OP button beside the other menu buttons
+    /// that opens a panel with host / invite / start / leave and a live status line.
+    /// Every piece is cloned from the game's own menu so it looks and feels native.
+    /// The console commands still work, but nobody should have to use them.
     /// </summary>
     internal sealed class CoopMenu
     {
@@ -20,12 +19,10 @@ namespace Gambonanza.Coop
 
         private readonly CoopNet _net;
         private readonly CoopSession _session;
+        private readonly CoopPanel _panel = new CoopPanel();
 
-        private Modal _modal;
-        private Button _hostBtn, _inviteBtn, _startBtn, _leaveBtn;
-        private TMP_Text _seatLabel, _peerLabel, _hintLabel;
-        private float _refreshClock;
-        private bool _buttonInjected;
+        private CoopNativeButton _homeButton;
+        private float _retryClock;
 
         public CoopMenu(CoopNet net, CoopSession session)
         {
@@ -33,11 +30,6 @@ namespace Gambonanza.Coop
             _session = session;
         }
 
-        /// <summary>
-        /// Injects the home-menu button. ModHost exposes no OnHomeMenuOpened event to mods,
-        /// so we look for a live CanvasMenu instead; Pixel.AddHomeMenuButton is idempotent by
-        /// injected name, and we re-arm whenever the menu is rebuilt.
-        /// </summary>
         public void Tick()
         {
             var gm = SingletonMonoBehaviour<GameManager>.Instance;
@@ -45,131 +37,105 @@ namespace Gambonanza.Coop
 
             if (!inMenu)
             {
-                _buttonInjected = false;      // the menu canvas is torn down between visits
+                // The menu canvas is torn down between visits, taking our clones with it.
+                if (_homeButton == null || _homeButton.gameObject == null) _homeButton = null;
+                if (_panel.IsOpen) _panel.Hide();
                 return;
             }
 
-            _refreshClock -= Time.unscaledDeltaTime;
-            if (!_buttonInjected && _refreshClock <= 0f)
+            if (_homeButton == null)
             {
-                _refreshClock = 0.5f;
-                TryInjectButton();
+                _retryClock -= Time.unscaledDeltaTime;
+                if (_retryClock <= 0f)
+                {
+                    _retryClock = 0.5f;
+                    TryInjectButton();
+                }
             }
 
-            if (_modal != null && _modal.Root != null && _modal.Root.activeSelf)
-                RefreshPanel();
+            if (_panel.IsOpen) Refresh();
         }
 
         private void TryInjectButton()
         {
-            var menu = UnityEngine.Object.FindAnyObjectByType<CanvasMenu>();
-            if (menu == null) return;
+            var parts = CoopMenuParts.Find();
+            if (parts == null) return;
 
-            var btn = Pixel.AddHomeMenuButton(menu, "CO-OP", ButtonName, Open);
-            if (btn != null)
-            {
-                _buttonInjected = true;
-                CoopLog.Debug("home menu button injected");
-            }
+            var row = parts.ButtonCell.parent;
+            if (row == null) return;
+            if (row.Find(ButtonName) != null) return;      // already there
+
+            // Clone a real menu cell so the CO-OP button IS a menu button.
+            var cell = UnityEngine.Object.Instantiate(parts.ButtonCell.gameObject, row);
+            cell.name = ButtonName;
+            cell.transform.SetSiblingIndex(parts.ButtonCell.GetSiblingIndex() + 1);
+            cell.SetActive(true);
+
+            _homeButton = CoopNativeButton.Attach(cell, "CO-OP", Open);
+            CoopLog.Debug("home menu button injected");
+
         }
 
         public void Open()
         {
-            EnsureModal();
-            if (_modal == null) { CoopLog.Warn("could not build the co-op panel."); return; }
-            RefreshPanel();
-            _modal.Show();
+            if (!_panel.Ensure(
+                    onHost: () => { _net.HostLobby(); Refresh(); },
+                    onInvite: () => { _net.OpenInviteDialog(); Refresh(); },
+                    onStart: () => { _session.HostStartRun(); _panel.Hide(); },
+                    onLeave: () => { _session.EndSession(restoreSave: true); _net.LeaveLobby(); Refresh(); },
+                    onClose: () => _panel.Hide()))
+            {
+                CoopLog.Warn("could not build the co-op panel (menu parts unavailable).");
+                return;
+            }
+
+            Refresh();
+            _panel.Show();
         }
 
-        private void EnsureModal()
+        private void Refresh()
         {
-            if (_modal != null && _modal.Root != null) return;
-
-            _modal = Pixel.CreateModal("__CoopModal", "CO-OP");
-            if (_modal == null) return;
-
-            _seatLabel = Pixel.CreateLabel(_modal.Content, "", 22f);
-            _peerLabel = Pixel.CreateLabel(_modal.Content, "", 18f);
-            _hintLabel = Pixel.CreateLabel(_modal.Content, "", 15f);
-
-            _hostBtn = Pixel.CreateButton(_modal.Content, "Host a game", () =>
-            {
-                _net.HostLobby();
-                RefreshPanel();
-            });
-
-            _inviteBtn = Pixel.CreateButton(_modal.Content, "Invite a friend", () =>
-            {
-                _net.OpenInviteDialog();
-                RefreshPanel();
-            });
-
-            _startBtn = Pixel.CreateButton(_modal.Content, "Start the run", () =>
-            {
-                _session.HostStartRun();
-                _modal.Hide();
-            });
-
-            _leaveBtn = Pixel.CreateButton(_modal.Content, "Leave", () =>
-            {
-                _session.EndSession(restoreSave: true);
-                _net.LeaveLobby();
-                RefreshPanel();
-            });
-
-            _modal.AddToolbarButton("Close", () => _modal.Hide());
-        }
-
-        private void RefreshPanel()
-        {
-            if (_modal == null) return;
-
             bool connected = _net.Connected;
             bool inLobby = _net.LobbyId != Steamworks.CSteamID.Nil;
             bool host = _net.IsHost;
             bool running = _session.Phase == Phase.Running;
 
-            if (_seatLabel != null)
-            {
-                _seatLabel.text = !inLobby
-                    ? "Not in a lobby"
-                    : (host ? "You are P1  (red)" : "You are P2  (blue)");
-                _seatLabel.color = !inLobby ? Color.white
-                    : (host ? CoopVisuals.P1 : CoopVisuals.P2);
-            }
+            string seat = !inLobby ? "Not in a lobby" : (host ? "You are P1" : "You are P2");
+            Color seatColor = !inLobby ? new Color(0.35f, 0.30f, 0.25f)
+                                       : (host ? CoopVisuals.P1 : CoopVisuals.P2);
 
-            if (_peerLabel != null)
-                _peerLabel.text = connected
-                    ? $"Playing with {_net.PeerName}"
-                    : (inLobby ? "Waiting for a friend to join..." : "");
+            string peer = connected
+                ? $"Playing with {_net.PeerName}"
+                : (inLobby ? "Waiting for a friend to join..." : "");
 
-            if (_hintLabel != null)
-            {
-                if (running) _hintLabel.text = "Run in progress. P1 moves, P2 moves, then the enemy moves twice.";
-                else if (connected && host) _hintLabel.text = "Both of you are in. Start the run whenever you are ready.";
-                else if (connected) _hintLabel.text = "Waiting for P1 to start the run.";
-                else if (inLobby) _hintLabel.text = "Invite a friend, or have them accept from the Steam overlay.";
-                else _hintLabel.text = "Host a game, then invite a friend from Steam.";
-            }
+            string hint;
+            if (running) hint = "Run in progress.  P1 moves, P2 moves, then the enemy moves twice.";
+            else if (connected && host) hint = "Both of you are in. Start whenever you are ready.";
+            else if (connected) hint = "Waiting for P1 to start the run.";
+            else if (inLobby) hint = "Invite a friend, or let them accept from Steam.";
+            else hint = "Host a game, then invite a friend from Steam.";
 
-            SetActive(_hostBtn, !inLobby);
-            SetActive(_inviteBtn, inLobby && host && !running);
-            SetActive(_startBtn, connected && host && !running);
-            SetActive(_leaveBtn, inLobby);
+            _panel.SetTexts(seat, seatColor, peer, hint);
+
+            // Hide what does not apply rather than greying it out.
+            Set(_panel.Host, !inLobby);
+            Set(_panel.Invite, inLobby && host && !running);
+            Set(_panel.Start, connected && host && !running);
+            Set(_panel.Leave, inLobby);
+            Set(_panel.Close, true);
         }
 
-        private static void SetActive(Button b, bool on)
+        private static void Set(CoopNativeButton b, bool on)
         {
-            if (b != null && b.gameObject != null && b.gameObject.activeSelf != on)
-                b.gameObject.SetActive(on);
+            if (b != null) b.SetVisible(on);
         }
 
         public void Teardown()
         {
-            if (_modal != null && _modal.Root != null)
-                UnityEngine.Object.Destroy(_modal.Root);
-            _modal = null;
-            _buttonInjected = false;
+            _panel.Teardown();
+            if (_homeButton != null && _homeButton.gameObject != null)
+                UnityEngine.Object.Destroy(_homeButton.gameObject);
+            _homeButton = null;
         }
     }
 }

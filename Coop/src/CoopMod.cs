@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "0.0.1";
+        public const string ModVersion = "0.0.2";
 
         private IModContext _context;
         private CoopRunner _runner;
@@ -145,6 +145,7 @@ namespace Gambonanza.Coop
             if (!autoHost && context != null && !string.IsNullOrEmpty(context.ModDirectory))
                 autoHost = System.IO.File.Exists(System.IO.Path.Combine(context.ModDirectory, "autohost"));
             if (autoHost) StartCoroutine(AutoHost());
+
         }
 
         private IEnumerator AutoHost()
