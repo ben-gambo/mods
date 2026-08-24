@@ -13,7 +13,7 @@ namespace Gambonanza.Coop
         public const string RunStart = "RUNSTART";    // seed|difficulty|strain|activeStrains|activeBonus|betterAI|tmpStrain|tmpBonus|actStrain|unlockCsv
         public const string State = "STATE";          // prevState|curState  (host -> guest advancement)
         public const string Move = "MOVE";            // seat|fromKind|a|b|toR|toC|kind(0 normal/1 promoting/2 free/3 end-tile-skip)
-        public const string Drop = "DROP";            // seat|stockIdx|toR|toC
+        public const string Drop = "DROP";            // seat|stockIdx|toR|toC|kind(0 normal/1 promoting/2 free)
         public const string Place = "PLACE";          // seat|fromKind|a|b|toKind|a|b
         public const string Promo = "PROMO";          // toR|toC|pieceType|cost
         public const string EnemyMove = "EMOVE";      // fromR|fromC|toR|toC
@@ -31,6 +31,7 @@ namespace Gambonanza.Coop
         public const string Gacha = "GACHA";          // op(p/c)|slot|mode  (gachapon)
         public const string Cursor = "CURSOR";        // x|y|hoverR|hoverC|selKind|a|b   (unreliable ch.1)
         public const string Wait = "WAIT";           // seat
+        public const string SleepyWait = "SWAIT";    // seat|pawnKind|a|b  (Sleepy Promotion wait: turn held for the choice)
         public const string Bye = "BYE";
 
         public static string Make(string type, params object[] parts)

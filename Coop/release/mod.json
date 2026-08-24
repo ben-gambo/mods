@@ -1,7 +1,7 @@
 {
     "id":           "Coop",
     "name":         "Co-op",
-    "version":      "0.0.6",
+    "version":      "0.0.7",
     "author":       "Ben",
     "entry":        "Gambonanza.Coop.CoopMod",
     "enabled":      true,

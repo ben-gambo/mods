@@ -17,7 +17,7 @@ namespace Gambonanza.Coop
     /// </summary>
     internal sealed class CoopSession
     {
-        public const string ProtocolVersion = "5";
+        public const string ProtocolVersion = "6";
 
         private readonly CoopNet _net;
         private readonly CoopVisuals _vis;
@@ -127,6 +127,9 @@ namespace Gambonanza.Coop
             _vis.HideRemoteCursor();
             UnlockInput();
             _turnBannerText = null;
+            _localWaitPending = false;
+            _pendingRemotePromotion = null;
+            _pendingRemotePromotionTile = null;
             if (restoreSave) RestoreSaveSnapshot();
             CoopLog.Info("co-op session closed.");
         }
@@ -479,10 +482,24 @@ namespace Gambonanza.Coop
                     : CoopBoard.MoveNormal;
 
                 if (from.kind == CoopBoard.KindStock)
-                    _net.Send(Msg.Make(Msg.Drop, LocalSeat, from.a, toR, toC));
-                else
-                    _net.Send(Msg.Make(Msg.Move, LocalSeat, from.kind, from.a, from.b, toR, toC, kind));
+                {
+                    // Skydiver opens a promotion for a dropped pawn from inside the placement
+                    // event, which runs before this handler - so the state is already
+                    // PROMOTION here and the turn is held for the choice, exactly like a
+                    // promoting move.
+                    var gmD = SingletonMonoBehaviour<GameManager>.Instance;
+                    int dropKind = gmD != null && gmD.CurrentState == State.PROMOTION ? CoopBoard.DropPromoting
+                        : (tmK != null && tmK.CanPlay) ? CoopBoard.DropFree
+                        : CoopBoard.DropNormal;
+                    _net.Send(Msg.Make(Msg.Drop, LocalSeat, from.a, toR, toC, dropKind));
+                    CoopLog.Debug($"sent drop {from.a} -> {toR},{toC} kind={dropKind}");
+                    if (dropKind == CoopBoard.DropPromoting) { _awaitingLocalPromotion = true; return; }
+                    if (dropKind == CoopBoard.DropFree) return;
+                    AdvanceTurnAfterPlayerAction();
+                    return;
+                }
 
+                _net.Send(Msg.Make(Msg.Move, LocalSeat, from.kind, from.a, from.b, toR, toC, kind));
                 CoopLog.Debug($"sent action {from.kind}{from.a},{from.b} -> {toR},{toC} kind={kind}");
 
                 if (kind == CoopBoard.MovePromoting)
@@ -516,15 +533,57 @@ namespace Gambonanza.Coop
         /// fires none of the SelectionManager turn events, so without this hook it would
         /// bypass the director entirely and let the guest run its own enemy AI.
         /// </summary>
+        private bool _localWaitPending;
+
         private void OnLocalWait()
         {
             if (_applyingRemote || Phase != Phase.Running) return;
             // The CanMove gate keeps the wait button dead outside your window, but guard the
             // protocol anyway: an out-of-turn wait must never shift the shared seats.
             if (ActiveSeat != LocalSeat) { CoopLog.Warn("local wait outside your window - not relayed."); return; }
-            _net.Send(Msg.Make(Msg.Wait, LocalSeat));
-            CoopLog.Debug("sent wait");
-            AdvanceTurnAfterPlayerAction();
+            // Resolution is deferred one tick: Gambit_SleepyPromotion's OnWait handler runs
+            // AFTER this one in the multicast and can turn the wait into a held promotion
+            // (enemy turn cancelled, picker open). Only once the multicast has finished do we
+            // know which kind of wait this actually was.
+            _localWaitPending = true;
+        }
+
+        /// <summary>Runs the tick after a local wait, once every OnWait listener has spoken.</summary>
+        private void ResolveLocalWait()
+        {
+            _localWaitPending = false;
+            var gm = SingletonMonoBehaviour<GameManager>.Instance;
+
+            if (gm == null || gm.CurrentState != State.PROMOTION)
+            {
+                // An ordinary wait: relay and advance, exactly as before, one frame later -
+                // well inside the 0.5s before the wait's enemy turn consumes the armed skip.
+                _net.Send(Msg.Make(Msg.Wait, LocalSeat));
+                CoopLog.Debug("sent wait");
+                AdvanceTurnAfterPlayerAction();
+                return;
+            }
+
+            // Sleepy Promotion fired: the wait scheduled no enemy turn, a picker is open for
+            // a pawn the gambit chose (from an unordered FindObjectsOfType, so the pick CANNOT
+            // be reproduced remotely - the address must travel), and the turn is held until
+            // the choice. PromotePlayerInto will advance, like any promotion.
+            var pm = SingletonMonoBehaviour<PromotionManager>.Instance;
+            var pawn = pm != null ? GameRefl.GetField(pm, "m_PieceToPromotePlayer") as BasePieceBehaviour : null;
+            if (pawn != null && CoopBoard.TryLocate(pawn, out var k, out var a, out var b))
+            {
+                _net.Send(Msg.Make(Msg.SleepyWait, LocalSeat, k, a, b));
+                _awaitingLocalPromotion = true;
+                CoopLog.Debug($"sent sleepy wait, pawn {k}{a},{b}");
+            }
+            else
+            {
+                // Should be unreachable (the pawn is on the board by construction). Relay a
+                // plain wait so the peer at least keeps its counter; the boards will drift
+                // and the checksum will say so.
+                CoopLog.Warn("sleepy wait: promoted pawn unaddressable - relaying a plain wait.");
+                _net.Send(Msg.Make(Msg.Wait, LocalSeat));
+            }
         }
 
         /// <summary>
@@ -833,6 +892,7 @@ namespace Gambonanza.Coop
         public void Tick()
         {
             if (Phase == Phase.Idle) return;
+            if (_localWaitPending) ResolveLocalWait();
             TickInputGate();
             TickEnemyPhaseWatchdog();
             TickCursor();
@@ -967,6 +1027,9 @@ namespace Gambonanza.Coop
                     case Msg.Wait:
                         HandleRemoteWait();
                         break;
+                    case Msg.SleepyWait:
+                        HandleRemoteSleepyWait(p);
+                        break;
                     case Msg.Buy:
                         _shop.ApplyBuy(Msg.I(p, 1));
                         break;
@@ -1096,6 +1159,7 @@ namespace Gambonanza.Coop
             int seat = Msg.I(p, 1);
             int stockIdx = Msg.I(p, 2);
             int toR = Msg.I(p, 3), toC = Msg.I(p, 4);
+            int dropKind = Msg.I(p, 5);
             var piece = CoopBoard.PieceAt(CoopBoard.KindStock, stockIdx, 0);
             var target = CoopBoard.TileAt(toR, toC);
             if (piece == null || target == null)
@@ -1103,15 +1167,68 @@ namespace Gambonanza.Coop
                 CoopLog.Warn($"remote drop unresolved (stock {stockIdx} -> {toR},{toC})");
                 return;
             }
+
+            // A promoting drop means Skydiver: the sender's picker is open, the choice will
+            // arrive as PROMO. The placement event must still fire here - dozens of gambits
+            // listen to it - but OUR copy of Skydiver must not react and open a second
+            // picker, so its handler is lifted off the event for the duration of the apply.
+            var skydiverHooks = dropKind == CoopBoard.DropPromoting ? UnhookSkydiver() : null;
             _applyingRemote = true;
             try
             {
                 _vis.SetOwner(piece, seat);
-                CoopBoard.ApplyStockDrop(piece, target, fireTurnEvents: true);
+                CoopBoard.ApplyStockDrop(piece, target, dropKind);
             }
-            finally { _applyingRemote = false; }
+            finally
+            {
+                _applyingRemote = false;
+                RehookSkydiver(skydiverHooks);
+            }
+
+            if (dropKind == CoopBoard.DropPromoting)
+            {
+                _pendingRemotePromotion = piece;
+                _pendingRemotePromotionTile = target;
+                CoopLog.Debug("remote skydiver drop - awaiting promotion choice");
+                return;
+            }
+            if (dropKind == CoopBoard.DropFree) return;
 
             AdvanceTurnAfterPlayerAction();
+        }
+
+        /// <summary>Removes every live GambitSkydiver.Effect from the placement event; returns
+        /// the delegates so RehookSkydiver can restore them. Delegate.Remove matches on
+        /// target+method, so a reconstructed delegate removes the gambit's own subscription.</summary>
+        private static System.Collections.Generic.List<Delegate> UnhookSkydiver()
+        {
+            var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
+            if (sel == null) return null;
+            var mi = GameRefl.Method(typeof(GambitSkydiver), "Effect",
+                typeof(BasePieceBehaviour), typeof(TileBehaviour));
+            if (mi == null) return null;
+
+            var removed = new System.Collections.Generic.List<Delegate>();
+            var instances = UnityEngine.Object.FindObjectsByType<GambitSkydiver>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var g in instances)
+            {
+                if (g == null) continue;
+                var del = Delegate.CreateDelegate(typeof(Action<BasePieceBehaviour, TileBehaviour>), g, mi, false);
+                if (del == null) continue;
+                sel.OnPlacePieceOnBoardInGame = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Remove(sel.OnPlacePieceOnBoardInGame, del);
+                removed.Add(del);
+            }
+            return removed;
+        }
+
+        private static void RehookSkydiver(System.Collections.Generic.List<Delegate> hooks)
+        {
+            if (hooks == null || hooks.Count == 0) return;
+            var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
+            if (sel == null) return;
+            foreach (var del in hooks)
+                sel.OnPlacePieceOnBoardInGame = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Combine(sel.OnPlacePieceOnBoardInGame, del);
         }
 
         private void HandleRemotePlace(string[] p)
@@ -1296,6 +1413,51 @@ namespace Gambonanza.Coop
             var tm = SingletonMonoBehaviour<TurnManager>.Instance;
             if (tm != null) tm.PlayerTurn();
             else CountEnemyTurn();   // never expected; keep the count alive regardless
+        }
+
+        /// <summary>
+        /// The peer's wait triggered Sleepy Promotion: no enemy turn, a picker open on THEIR
+        /// screen for the pawn this message names, their turn held until the choice. This
+        /// client must NOT replay WaitManager.Wait() - our own copy of the gambit would fire
+        /// off its OnWait and open a second, independently-random picker - so the wait's
+        /// gameplay bookkeeping is mirrored by hand and the pawn is staged as the pending
+        /// promotion for the PROMO that follows, the same path a promoting move uses.
+        /// </summary>
+        private void HandleRemoteSleepyWait(string[] p)
+        {
+            var gm = SingletonMonoBehaviour<GameManager>.Instance;
+            var wm = SingletonMonoBehaviour<WaitManager>.Instance;
+            if (gm == null || wm == null || gm.CurrentState != State.INGAME)
+            {
+                CoopLog.Warn("sleepy wait arrived outside battle - possible desync.");
+                return;
+            }
+
+            // The same wallet mirror a plain remote wait gets.
+            var strains = SingletonMonoBehaviour<StrainManager>.Instance;
+            var cdm = SingletonMonoBehaviour<ChessDataManager>.Instance;
+            if (strains != null && cdm != null && strains.ActivatedStrain[Strain.COSTLY_WAIT]
+                && cdm.Coins >= strains.WaitCost && !wm.CannotWaitBecauseOfChaosMode)
+                cdm.DecreaseCoin(strains.WaitCost);
+
+            // WaitManager.Wait()'s gameplay effects, minus OnWait and minus the enemy turn
+            // (the sender's was cancelled by the gambit): counter, label, wait influence.
+            if (!wm.CoconutJuiceGambit) wm.CurrentWait--;
+            wm.OnUpdateText?.Invoke(wm.CurrentWait);
+            SingletonMonoBehaviour<BuildBalanceManager>.Instance?.IncreaseGambitInfluence(Gambit_Focus.WAIT, 0.03f);
+
+            char k = Msg.S(p, 2).Length > 0 ? Msg.S(p, 2)[0] : CoopBoard.KindBoard;
+            var pawn = CoopBoard.PieceAt(k, Msg.I(p, 3), Msg.I(p, 4));
+            if (pawn == null)
+            {
+                CoopLog.Warn("sleepy wait: pawn unresolved - the coming promotion will be dropped.");
+                return;
+            }
+            pawn.HighlightEffect();   // the sender's client highlights it too
+            _pendingRemotePromotion = pawn;
+            _pendingRemotePromotionTile = pawn.CurrentTile;
+            CoopLog.Debug($"remote sleepy wait staged pawn {k}{Msg.I(p, 3)},{Msg.I(p, 4)} - awaiting choice");
+            // No seat advance: HandleRemotePromotion advances when the choice lands.
         }
 
         private void HandleRemoteEnemyMove(string[] p)

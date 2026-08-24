@@ -3,6 +3,19 @@ Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice.
 Unzip into your game's `Mods/` folder. **Both players need this version** — the
 wire protocol changed, so 0.0.3 refuses to play with 0.0.2 rather than desyncing.
 
+## 0.0.7
+
+- **Sleepy Promotion works in co-op.** The wait-to-promote picker now belongs to
+  the player who waited: their pawn pick and piece choice travel to the other
+  client, which mirrors the wait's bookkeeping (counter, costly-wait coins) and
+  applies the promotion without ever opening its own picker. Previously both
+  clients rolled their own pawn and opened independent pickers.
+- **Skydiver works in co-op.** A dropped pawn's promotion is now held and
+  mirrored the same way a normal promotion is; the other client applies the
+  choice programmatically while every other placement-triggered gambit still
+  fires. Previously both clients got an interactive picker.
+- Both were listed as known limits in 0.0.6 - that section is gone.
+
 ## 0.0.6
 
 - **Waiting works.** A wait is more than a seat change - it decrements the shared

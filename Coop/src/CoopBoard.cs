@@ -161,8 +161,13 @@ namespace Gambonanza.Coop
             return true;
         }
 
+        /// <summary>How the sender's client committed this drop.</summary>
+        public const int DropNormal = 0;     // OnHasPlayed fired: an ordinary turn-ending drop
+        public const int DropPromoting = 1;  // Skydiver opened a promotion for the dropped pawn: turn held
+        public const int DropFree = 2;       // the game did not end the turn (no known vanilla path; safety)
+
         /// <summary>Replicates dropping a stock piece onto the board during INGAME.</summary>
-        public static bool ApplyStockDrop(BasePieceBehaviour piece, TileBehaviour target, bool fireTurnEvents)
+        public static bool ApplyStockDrop(BasePieceBehaviour piece, TileBehaviour target, int kind)
         {
             if (piece == null || target == null || target.IsStock || target.Piece != null) return false;
             var sel = Sel;
@@ -189,12 +194,12 @@ namespace Gambonanza.Coop
             var wave = target.GetWaveBehaviour();
             if (wave != null) SingletonMonoBehaviour<ShockWaveManager>.Instance?.StartWave(wave, 0.4f, 0.15f);
 
-            if (fireTurnEvents)
-            {
-                sel.OnHasPlayed?.Invoke();
-                sel.OnPlayerMadeAnActionThatEndsItsTurn?.Invoke();
-            }
-            CoopLog.Debug("applied stock drop");
+            // The sender fired OnPlayerMadeAnActionThatEndsItsTurn for every committed drop
+            // (SelectionManager.cs:893), but OnHasPlayed only when the drop actually ended the
+            // turn - Skydiver suppresses it while its promotion is pending.
+            if (kind == DropNormal) sel.OnHasPlayed?.Invoke();
+            sel.OnPlayerMadeAnActionThatEndsItsTurn?.Invoke();
+            CoopLog.Debug($"applied stock drop kind={kind}");
             return true;
         }
 
