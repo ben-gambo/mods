@@ -17,13 +17,14 @@ namespace Gambonanza.Coop
     /// </summary>
     internal sealed class CoopSession
     {
-        public const string ProtocolVersion = "3";
+        public const string ProtocolVersion = "4";
 
         private readonly CoopNet _net;
         private readonly CoopVisuals _vis;
         private readonly CoopShop _shop;
         private readonly CoopWheel _wheel;
         private readonly CoopStartWheel _startWheel;
+        private readonly CoopGachapon _gacha;
         private readonly CoopIncome _income;
         private readonly MonoBehaviour _runner;
 
@@ -39,6 +40,7 @@ namespace Gambonanza.Coop
         private readonly int _enemyTurnsTarget = 2;
         private bool _moveSentThisEnemyTurn;     // host: did this enemy turn actually move a piece?
         private float _enemyPhaseClock;          // watchdog against a stranded enemy phase
+        private float _inputStallClock;          // watchdog against a round that never unlocks
         private bool _gateHoldingLock;
         private float _cursorClock;
         private float _checkClock;
@@ -69,6 +71,7 @@ namespace Gambonanza.Coop
             _shop = new CoopShop(s => _net.Send(s));
             _wheel = new CoopWheel(s => _net.Send(s));
             _startWheel = new CoopStartWheel(s => _net.Send(s));
+            _gacha = new CoopGachapon(s => _net.Send(s));
 
             _net.OnPeerJoined += HandlePeerJoined;
             _net.OnPeerLeft += HandlePeerLeft;
@@ -113,10 +116,12 @@ namespace Gambonanza.Coop
             _shop.Unhook();
             _wheel.Reset();
             _startWheel.Reset();
+            _gacha.Reset();
             _vis.ClearTints();
             _vis.HideBadges();
             _vis.HideRemoteCursor();
             UnlockInput();
+            _turnBannerText = null;
             if (restoreSave) RestoreSaveSnapshot();
             CoopLog.Info("co-op session closed.");
         }
@@ -174,6 +179,7 @@ namespace Gambonanza.Coop
             _vis.ClearOwners();
             _wheel.Reset();
             _startWheel.Reset();
+            _gacha.Reset();
 
             _income.Install();
             _income.Enabled = true;
@@ -324,6 +330,7 @@ namespace Gambonanza.Coop
             {
                 ClearStaleTurnFlags();
                 if (state != State.WIN) _vis.HideBadges();
+                if (state == State.WIN) _income.ShowShareOnWinScreen(_runner);
             }
             else if (state == State.MENU)
             {
@@ -535,6 +542,7 @@ namespace Gambonanza.Coop
                 {
                     _net.Send(Msg.Make(Msg.EnemyMove, fr, fc, tr, tc));
                     _moveSentThisEnemyTurn = true;
+                    _enemyPhaseClock = 0f;
                     CoopLog.Debug($"sent enemy move {fr},{fc} -> {tr},{tc}");
                 }
             }
@@ -570,25 +578,75 @@ namespace Gambonanza.Coop
         }
 
         /// <summary>
-        /// Last-resort recovery. If the enemy phase somehow never completes but the game has
-        /// already handed input back, restore the round rather than leave both players locked
-        /// out with no way forward.
+        /// Last-resort recovery, two flavours.
+        ///
+        /// CanPlay==true while ActiveSeat==-1: the game handed input back but our count never
+        /// reached two - restore the round to P1 (the original watchdog).
+        ///
+        /// CanPlay==false for 8s with no enemy activity: FinalBossSkip got stranded. The game
+        /// consumes it ONLY inside TurnManager.PlayerCanPlay (TurnManager.cs:217-227), and the
+        /// post-turn scan can exit through OnPat - or through the everything-blocked-but-stock
+        /// dead end - without ever reaching it. CanPlay then stays false forever, and the old
+        /// watchdog treated that as "game busy" and reset its own clock: the exact soft lock
+        /// seen in testing, with no recovery and nothing in the log. Vanilla never hits this
+        /// because FinalBossSkip only exists on the final boss; we ride it every round.
+        /// The 8s clock is reset by every enemy move and every completed enemy turn, so a slow
+        /// animation cannot trip it - only genuine silence can.
         /// </summary>
         private void TickEnemyPhaseWatchdog()
         {
-            if (Phase != Phase.Running || ActiveSeat != -1) return;
+            if (Phase != Phase.Running) return;
             var tm = SingletonMonoBehaviour<TurnManager>.Instance;
             var gm = SingletonMonoBehaviour<GameManager>.Instance;
-            if (tm == null || gm == null || gm.CurrentState != State.INGAME) { _enemyPhaseClock = 0f; return; }
-            if (!tm.CanPlay) { _enemyPhaseClock = 0f; return; }
-
-            _enemyPhaseClock += Time.unscaledDeltaTime;
-            if (_enemyPhaseClock > 3f)
+            if (tm == null || gm == null || gm.CurrentState != State.INGAME)
             {
                 _enemyPhaseClock = 0f;
-                ActiveSeat = 0;
-                CoopLog.Warn("enemy phase stalled - restoring the round to P1.");
+                _inputStallClock = 0f;
+                return;
             }
+
+            if (ActiveSeat == -1)
+            {
+                _inputStallClock = 0f;
+                _enemyPhaseClock += Time.unscaledDeltaTime;
+
+                if (tm.CanPlay && _enemyPhaseClock > 3f)
+                {
+                    _enemyPhaseClock = 0f;
+                    ActiveSeat = 0;
+                    CoopLog.Warn("enemy phase stalled - restoring the round to P1.");
+                }
+                else if (!tm.CanPlay && _enemyPhaseClock > 8f)
+                {
+                    _enemyPhaseClock = 0f;
+                    tm.FinalBossSkip = false;
+                    ClearStaleTurnFlags();
+                    ActiveSeat = 0;
+                    var cdm = SingletonMonoBehaviour<ChessDataManager>.Instance;
+                    if (cdm == null || !cdm.Pat)
+                        tm.PlayerTurnSilent();   // vanilla re-check; restores CanPlay if a move exists
+                    CoopLog.Warn("enemy phase dead (stranded FinalBossSkip) - recovering the round to P1.");
+                }
+                return;
+            }
+
+            _enemyPhaseClock = 0f;
+
+            // A player's window, but the game never gave input back and no pat flow owns the
+            // board. After 8s of that, unlock bluntly - a locked client helps nobody.
+            if (!tm.CanPlay)
+            {
+                var cdm = SingletonMonoBehaviour<ChessDataManager>.Instance;
+                if (cdm != null && cdm.Pat) { _inputStallClock = 0f; return; }
+                _inputStallClock += Time.unscaledDeltaTime;
+                if (_inputStallClock > 8f)
+                {
+                    _inputStallClock = 0f;
+                    tm.CanPlay = true;
+                    CoopLog.Warn("input never returned for this round - forcing it back.");
+                }
+            }
+            else _inputStallClock = 0f;
         }
 
         // ---------- input gating ----------
@@ -635,7 +693,33 @@ namespace Gambonanza.Coop
             TickCursor();
             TickChecksum();
             TickLocalBadge();
-            if (Phase == Phase.Running) { _shop.Tick(); _wheel.Tick(); _startWheel.Tick(); }
+            TickTurnBanner();
+            if (Phase == Phase.Running) { _shop.Tick(); _wheel.Tick(); _startWheel.Tick(); _gacha.Tick(); }
+        }
+
+        // The vanilla banner only knows "Your turn!" / enemy - in co-op it must say WHOSE
+        // turn. The game rewrites its text from its own events (TurnIndicator.cs:118,134,151),
+        // so ours is enforced per frame while a player window is open; the enemy phase keeps
+        // the vanilla enemy text and colours.
+        private TMPro.TMP_Text _turnBannerText;
+
+        private void TickTurnBanner()
+        {
+            if (Phase != Phase.Running || ActiveSeat < 0) return;
+            var gm = SingletonMonoBehaviour<GameManager>.Instance;
+            if (gm == null || gm.CurrentState != State.INGAME) return;
+
+            if (_turnBannerText == null)
+            {
+                var ti = UnityEngine.Object.FindAnyObjectByType<TurnIndicator>();
+                if (ti == null) return;
+                _turnBannerText = GameRefl.GetField(ti, "m_TextIndicator") as TMPro.TMP_Text;
+                if (_turnBannerText == null) return;
+            }
+
+            string tag = ActiveSeat == 0 ? "<color=#F25555>P1</color>" : "<color=#5B9BFF>P2</color>";
+            string want = ActiveSeat == LocalSeat ? $"Your turn! ({tag})" : $"{tag}'s turn!";
+            if (_turnBannerText.text != want) _turnBannerText.text = want;
         }
 
         private void TickLocalBadge()
@@ -656,7 +740,7 @@ namespace Gambonanza.Coop
         {
             if (Phase != Phase.Running || !_net.Connected) return;
             _cursorClock += Time.unscaledDeltaTime;
-            if (_cursorClock < 0.1f) return;      // 10 Hz
+            if (_cursorClock < 1f / 30f) return;   // 30 Hz; smoothing on the receiver fills the rest
             _cursorClock = 0f;
 
             var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
@@ -752,6 +836,9 @@ namespace Gambonanza.Coop
                         break;
                     case Msg.StartWheel:
                         _startWheel.Apply(p);
+                        break;
+                    case Msg.Gacha:
+                        _gacha.Apply(p);
                         break;
                     case Msg.Place:
                         HandleRemotePlace(p);
@@ -999,6 +1086,7 @@ namespace Gambonanza.Coop
             _applyingRemote = true;
             try { CoopBoard.ApplyEnemyMove(fr, fc, tr, tc); }
             finally { _applyingRemote = false; }
+            _enemyPhaseClock = 0f;
         }
 
         private void HandleCheck(string[] p)

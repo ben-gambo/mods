@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Blukulele.CHE;
 using Blukulele.Core;
-using TMPro;
 using UnityEngine;
 
 namespace Gambonanza.Coop
@@ -16,10 +15,6 @@ namespace Gambonanza.Coop
         // P1 = red (host), P2 = blue (guest)
         public static readonly Color P1 = new Color(0.93f, 0.28f, 0.28f);
         public static readonly Color P2 = new Color(0.29f, 0.55f, 0.96f);
-        // The corner labels sit on the tile art itself, where the bright badge colours wash
-        // out - a darker cut of the same hue reads at that size.
-        public static readonly Color P1Label = new Color(0.52f, 0.10f, 0.10f);
-        public static readonly Color P2Label = new Color(0.10f, 0.24f, 0.52f);
 
         private const int BadgeOrder = 9;     // under pieces (10) but above tile feedback (base+2)
         private const int CursorOrder = 300;  // above everything world-space
@@ -27,9 +22,8 @@ namespace Gambonanza.Coop
 
         private GameObject _localBadge, _remoteBadge, _remoteCursor;
         private SpriteRenderer _localBadgeSr, _remoteBadgeSr, _remoteCursorSr;
-        private TextMeshPro _localBadgeTxt, _remoteBadgeTxt;
         private Sprite _squareSprite, _dotSprite;
-        private TMP_FontAsset _font;
+        private Vector3 _cursorTarget;
 
         private readonly Dictionary<BasePieceBehaviour, int> _owners = new Dictionary<BasePieceBehaviour, int>();
 
@@ -37,10 +31,9 @@ namespace Gambonanza.Coop
         {
             _squareSprite = MakeFrameSprite(24, 3);
             _dotSprite = MakeDiscSprite(16);
-            _font = FindFont();
 
-            _localBadge = MakeBadge("__CoopBadgeLocal", out _localBadgeSr, out _localBadgeTxt);
-            _remoteBadge = MakeBadge("__CoopBadgeRemote", out _remoteBadgeSr, out _remoteBadgeTxt);
+            _localBadge = MakeBadge("__CoopBadgeLocal", out _localBadgeSr);
+            _remoteBadge = MakeBadge("__CoopBadgeRemote", out _remoteBadgeSr);
 
             _remoteCursor = new GameObject("__CoopRemoteCursor");
             Object.DontDestroyOnLoad(_remoteCursor);
@@ -66,7 +59,7 @@ namespace Gambonanza.Coop
             if (_dotSprite != null) { Object.Destroy(_dotSprite.texture); Object.Destroy(_dotSprite); _dotSprite = null; }
         }
 
-        private GameObject MakeBadge(string name, out SpriteRenderer sr, out TextMeshPro txt)
+        private GameObject MakeBadge(string name, out SpriteRenderer sr)
         {
             var go = new GameObject(name);
             Object.DontDestroyOnLoad(go);
@@ -74,24 +67,6 @@ namespace Gambonanza.Coop
             sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = _squareSprite;
             sr.sortingOrder = BadgeOrder;
-
-            var label = new GameObject("label");
-            label.transform.SetParent(go.transform, false);
-            // bottom-left corner of the tile; tile pitch is 1.0 world unit
-            label.transform.localPosition = new Vector3(-0.34f, -0.34f, -0.01f);
-            txt = label.AddComponent<TextMeshPro>();
-            txt.text = "P1";
-            txt.fontSize = 2.2f;
-            txt.fontStyle = FontStyles.Bold;
-            txt.alignment = TextAlignmentOptions.Center;
-            txt.textWrappingMode = TextWrappingModes.NoWrap;
-            txt.raycastTarget = false;
-            if (_font != null) txt.font = _font;
-            var mr = label.GetComponent<MeshRenderer>();
-            if (mr != null) mr.sortingOrder = BadgeOrder + 1;
-            var rt = txt.rectTransform;
-            rt.sizeDelta = new Vector2(0.5f, 0.3f);
-
             go.SetActive(false);
             return go;
         }
@@ -103,15 +78,12 @@ namespace Gambonanza.Coop
         {
             var go = remote ? _remoteBadge : _localBadge;
             var sr = remote ? _remoteBadgeSr : _localBadgeSr;
-            var txt = remote ? _remoteBadgeTxt : _localBadgeTxt;
             if (go == null) return;
 
             if (tile == null) { go.SetActive(false); return; }
 
             var color = seat == 0 ? P1 : P2;
             sr.color = new Color(color.r, color.g, color.b, remote ? 0.95f : 0.75f);
-            txt.text = seat == 0 ? "P1" : "P2";
-            txt.color = seat == 0 ? P1Label : P2Label;
 
             var p = tile.transform.position;
             go.transform.position = new Vector3(p.x, p.y, -3f);
@@ -129,8 +101,24 @@ namespace Gambonanza.Coop
             if (_remoteCursor == null) return;
             var c = seat == 0 ? P1 : P2;
             _remoteCursorSr.color = new Color(c.r, c.g, c.b, 0.85f);
-            _remoteCursor.transform.position = new Vector3(worldPos.x, worldPos.y, -4f);
-            if (!_remoteCursor.activeSelf) _remoteCursor.SetActive(true);
+            _cursorTarget = new Vector3(worldPos.x, worldPos.y, -4f);
+            if (!_remoteCursor.activeSelf)
+            {
+                _remoteCursor.transform.position = _cursorTarget;   // snap on first show
+                _remoteCursor.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// Exponential chase toward the last received position, every frame. The wire rate
+        /// is 30 Hz; this fills the frames in between so the ally's cursor glides instead
+        /// of stepping.
+        /// </summary>
+        public void TickCursorSmoothing(float dt)
+        {
+            if (_remoteCursor == null || !_remoteCursor.activeSelf) return;
+            var t = _remoteCursor.transform;
+            t.position = Vector3.Lerp(t.position, _cursorTarget, 1f - Mathf.Exp(-16f * dt));
         }
 
         public void HideRemoteCursor()
@@ -272,19 +260,6 @@ namespace Gambonanza.Coop
                 }
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size * 2f);
-        }
-
-        private static TMP_FontAsset FindFont()
-        {
-            var all = Resources.FindObjectsOfTypeAll<TMP_FontAsset>();
-            if (all != null && all.Length > 0)
-            {
-                foreach (var f in all)
-                    if (f != null && !f.name.Contains("Japanese") && !f.name.Contains("Korean") && !f.name.Contains("Chinese"))
-                        return f;
-                return all[0];
-            }
-            return null;
         }
     }
 }

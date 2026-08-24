@@ -28,6 +28,7 @@ namespace Gambonanza.Coop
         public const string Wheel = "WHEEL";         // op(s/p/c)|slot|mode  (token piece wheel)
         public const string StartWheel = "SWHEEL";    // piecesCsv  (run-start piece selector)
         public const string Go = "GO";                // placement GO button
+        public const string Gacha = "GACHA";          // op(p/c)|slot|mode  (gachapon)
         public const string Cursor = "CURSOR";        // x|y|hoverR|hoverC|selKind|a|b   (unreliable ch.1)
         public const string Wait = "WAIT";           // seat
         public const string Bye = "BYE";

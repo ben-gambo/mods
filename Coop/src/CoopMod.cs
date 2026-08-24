@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "0.0.4";
+        public const string ModVersion = "0.0.5";
 
         private IModContext _context;
         private CoopRunner _runner;
@@ -173,6 +173,7 @@ namespace Gambonanza.Coop
             // PieceVisualEffect.Update() repaints the piece sprite every frame, so tints
             // have to be re-applied after it - LateUpdate always wins that race.
             _visuals?.ApplyTints();
+            _visuals?.TickCursorSmoothing(Time.unscaledDeltaTime);
         }
 
         private void HookSelectionOnce()

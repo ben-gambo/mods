@@ -3,6 +3,27 @@ Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice.
 Unzip into your game's `Mods/` folder. **Both players need this version** — the
 wire protocol changed, so 0.0.3 refuses to play with 0.0.2 rather than desyncing.
 
+## 0.0.5
+
+- **Soft-lock fixed.** The double enemy turn rides the game's own FinalBossSkip,
+  but the game only consumes that flag when its post-turn scan finds you a legal
+  move - a stalemate check could strand it, freezing both clients with the enemy
+  having played once. The watchdog now detects the strand and recovers the round;
+  a second net unlocks input if the game ever withholds it for 8s outside a
+  stalemate.
+- **The gachapon is shared.** The capsule and its cards were already identical
+  (seeded); now the pick is too - take or sell, first click wins, and skipping
+  closes it on both clients. Same treatment the wheels got.
+- **The turn banner names the player.** "Your turn! (P1)" on your screen,
+  "P1's turn!" on theirs, with the seat colour on the P1/P2 tag. The enemy
+  phase keeps the vanilla banner.
+- **Tile-selection badges lost their P1/P2 text** - the colours carry it.
+- **The ally cursor is smooth**: 30 Hz on the wire (was 10) plus per-frame
+  smoothing on the receiver.
+- **Income now rounds up.** Each player banks ceil(earned/2) - two of you never
+  earn less than one solo player. The WIN screen shows it: a CO-OP SPLIT row in
+  the money breakdown, and the collect button shows what you actually bank.
+
 ## 0.0.4
 
 - **The run-start piece wheel is shared.** 0.0.3 synced the token-shop wheel, but
