@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared settings and the GambonanzaModsDir / GambonanzaRefs lookup live in
+       ../Directory.Build.props. Everything here is DLL references rather than
+       project references, so building a mod never builds (or dirties) the
+       framework checkout it points at. -->
+
+  <PropertyGroup>
+    <AssemblyName>Gambonanza.MoonGambit</AssemblyName>
+    <RootNamespace>Gambonanza.MoonGambit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Gambonanza.ModSdk">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Gambonanza.GambitApi">
+      <HintPath>$(GambonanzaModsDir)/Mods/GambitApi/Gambonanza.GambitApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The merge ceremony tweens the two cards together before swapping in
+         the Eclipse, using the same DOTween the vanilla drop animation uses. -->
+    <Reference Include="DOTween">
+      <HintPath>$(GambonanzaRefs)/DOTween.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- AudioManager.Play's signature reaches into the audio mixer types, the
+         merge watcher toggles the cards' Collider2D, and GambitBehaviour's
+         public surface drags in UI/physics types - so all four modules ride
+         along even though we never use them directly. -->
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.Physics2DModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
