@@ -57,6 +57,10 @@ namespace Gambonanza.MoonGambit
             DataManager.Instance.Data.ProtectiveTileUsed = true;
             DataManager.Instance.Data.PhantomTileUsed = true;
 
+            // The card claims credit: vanilla activation feedback on the
+            // Eclipse card itself, in sync with the cascade starting.
+            GambitEclipse.FlashOwnedCards();
+
             // Feedback cascade + the phantom copy. Capture type and position
             // now, like vanilla does - the piece may be gone by 0.45s.
             StartCoroutine(CO_Cascade(

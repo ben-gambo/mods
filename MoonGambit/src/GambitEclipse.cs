@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Blukulele.Audio;
 using Blukulele.CHE;
 using Blukulele.Core;
@@ -35,8 +36,8 @@ namespace Gambonanza.MoonGambit
     /// </summary>
     public sealed class GambitEclipse : BaseGambit
     {
-        /// <summary>How many Eclipse cards are alive. Tiles stay wrapped while any is.</summary>
-        internal static int AliveCount;
+        /// <summary>Every Eclipse card currently alive. Tiles stay wrapped while any is.</summary>
+        private static readonly List<GambitEclipse> s_Alive = new List<GambitEclipse>();
 
         // Trap dedup when several Eclipse cards are owned: every instance hears
         // the same EnemyManager event, but only one gets to spring the trap.
@@ -47,7 +48,7 @@ namespace Gambonanza.MoonGambit
 
         private void Start()
         {
-            AliveCount++;
+            s_Alive.Add(this);
             Subscribe();
             WrapGoldenTiles();
         }
@@ -57,9 +58,28 @@ namespace Gambonanza.MoonGambit
         private void OnDestroy()
         {
             Unsubscribe();
-            AliveCount = Mathf.Max(0, AliveCount - 1);
-            if (AliveCount == 0)
+            s_Alive.Remove(this);
+            if (s_Alive.Count == 0)
                 UnwrapAllTiles();
+        }
+
+        /// <summary>
+        /// Punch the card(s) with the vanilla activation feedback - particle
+        /// burst, highlight flash, scale punch, activation sound. Called from
+        /// <see cref="EclipseTilePower"/> when a piece lands on an eclipsed
+        /// tile, and from the trap below: the card should visibly claim credit
+        /// every time its effect fires, not just when it gilds a tile.
+        /// </summary>
+        internal static void FlashOwnedCards()
+        {
+            for (int i = s_Alive.Count - 1; i >= 0; i--)
+            {
+                var card = s_Alive[i];
+                if (card != null)
+                {
+                    try { card.VisualEffect(); } catch { }
+                }
+            }
         }
 
         private void Subscribe()
@@ -271,6 +291,7 @@ namespace Gambonanza.MoonGambit
             AudioManager.Play(AudioEvents.TrapTile, loop: false, null, null, 0f, 0.3f);
             piece.Modifier.Trap();
             SingletonMonoBehaviour<TileManager>.Instance.OnHunterTileUsed?.Invoke(piece, tile);
+            FlashOwnedCards();
         }
     }
 }
