@@ -3,6 +3,38 @@ Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice.
 Unzip into your game's `Mods/` folder. **Both players need this version** — the
 wire protocol changed, so 0.0.3 refuses to play with 0.0.2 rather than desyncing.
 
+## 0.0.6
+
+- **Waiting works.** A wait is more than a seat change - it decrements the shared
+  3-per-battle counter and it is what triggers the enemy's turn - but the old
+  handler mirrored none of that, so the peer's game sat waiting for an action
+  that never came: the enemy never played and the round died. A remote wait now
+  replays through the game's own WaitManager on the other client, so the counter,
+  the costly-wait coin charge and the enemy phase all run the vanilla path on
+  both sides.
+- The wait button is now properly gated to your own window (it could look alive
+  on the other player's turn), and a window that opened after a wait no longer
+  has a dead wait button.
+- A failed enemy phase can no longer leak its double-turn flag into the next
+  round (which used to fire a rogue enemy move mid-window after a recovery).
+- **Promotions no longer derail the turn order.** A seat-0 promotion used to let
+  the interleaved enemy turn play for real, and a replayed promotion reset the
+  shared seats mid-apply - both ended in a soft lock or a rogue enemy move.
+- **Round counters stay in step.** The host's double enemy turn quietly advanced
+  its round counter one more than the guest's every round, splitting everything
+  keyed on it (Savage Mat, crumble timing). Skipped enemy turns (bribes, demons,
+  trapped enemies) now also replay their side effects on the other client.
+- **Strains actually sync now.** The run-start message always carried the host's
+  strain list, but the game only reads it back when LOADING a save - a new co-op
+  run played with whatever each client's last solo run had selected: different
+  wheel counts, different strain rules on the two boards. The synced list is now
+  pushed into the game's live strain state on both clients, and the "enemy plays
+  first" strain's wave opener is host-authoritative like every other enemy turn.
+- Promotion detection now uses the game's own signal instead of tile geometry,
+  which fixes two corners: the Excalibur gambit's promote-next-to-the-king (not
+  an end tile) desynced the seats, and a skipped promotion (no enemies left)
+  left the other client waiting forever for a choice.
+
 ## 0.0.5
 
 - **Soft-lock fixed.** The double enemy turn rides the game's own FinalBossSkip,

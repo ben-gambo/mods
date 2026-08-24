@@ -84,8 +84,18 @@ namespace Gambonanza.Coop
 
         // ---- replication of a remote player's committed action ----
 
-        /// <summary>Replicates an INGAME move/capture exactly as SelectionManager would, minus turn events.</summary>
-        public static bool ApplyInGameMove(BasePieceBehaviour piece, TileBehaviour target, bool fireTurnEvents)
+        /// <summary>How the sender's client committed this move - decides which events the replay fires.</summary>
+        public const int MoveNormal = 0;      // OnMove + OnHasPlayed: an ordinary turn-ending move
+        public const int MovePromoting = 1;   // no OnMove, no OnHasPlayed: turn held for the PROMO choice
+        public const int MoveFree = 2;        // no OnMove, no OnHasPlayed: the game did NOT end the turn (Excalibur rhythm-skip)
+        public const int MoveEndTileSkip = 3; // OnHasPlayed but no OnMove: end-tile move whose promotion was rhythm-skipped
+
+        /// <summary>Replicates an INGAME move/capture exactly as SelectionManager would.
+        /// kind comes from the WIRE, not from tile geometry: only the sender's client knows which
+        /// commit path actually ran - Excalibur promotes off non-end tiles, the rhythm skip moves
+        /// onto an end tile without promoting, and some gambit combinations commit a move without
+        /// ending the turn at all. The replay must fire exactly the events the sender's did.</summary>
+        public static bool ApplyInGameMove(BasePieceBehaviour piece, TileBehaviour target, int kind)
         {
             if (piece == null || target == null) return false;
             var prev = piece.CurrentTile;
@@ -123,11 +133,9 @@ namespace Gambonanza.Coop
 
             if (target.IsModified()) sel.OnMoveOnModifiedTile?.Invoke(target);
 
-            bool promoting = target.IsEnd
-                             && target.PromoteColor == PieceColor.WHITE
-                             && piece.PieceHierarchy == PieceHierarchy.PAWN;
-
-            if (!promoting)
+            // The sender's commit only fired OnMove on the ordinary path - the end-tile and
+            // Excalibur branches are mutually exclusive with it (SelectionManager.cs:823-881).
+            if (kind == MoveNormal)
             {
                 sel.OnMove?.Invoke(piece, target);
                 piece.OnMove?.Invoke();
@@ -136,17 +144,20 @@ namespace Gambonanza.Coop
             try { target.TilePower?.TriggerPower(target, prev, piece); }
             catch (Exception ex) { Debug.LogWarning($"[Coop] tile power threw: {ex.Message}"); }
 
-            if (fireTurnEvents && !promoting)
+            if (kind == MoveEndTileSkip)
             {
-                sel.OnHasPlayed?.Invoke();
-                sel.OnPlayerMadeAnActionThatEndsItsTurn?.Invoke();
-            }
-            else if (fireTurnEvents)
-            {
-                sel.OnPlayerMadeAnActionThatEndsItsTurn?.Invoke();
+                // The sender's client ran SkipPromotion for this commit; its cosmetic gambit
+                // listeners (Finish Line and friends) fire off this event.
+                SingletonMonoBehaviour<PromotionManager>.Instance?.OnSkipPromotionForRythm?.Invoke();
             }
 
-            CoopLog.Debug($"applied move -> capture={captured} promo={promoting}");
+            if (kind == MoveNormal || kind == MoveEndTileSkip)
+                sel.OnHasPlayed?.Invoke();
+            // OnPlayerMadeAnActionThatEndsItsTurn fired on the sender for EVERY commit kind
+            // (SelectionManager.cs:893) - counter gambits hook it, so the replay must match.
+            sel.OnPlayerMadeAnActionThatEndsItsTurn?.Invoke();
+
+            CoopLog.Debug($"applied move -> capture={captured} kind={kind}");
             return true;
         }
 

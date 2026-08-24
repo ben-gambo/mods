@@ -12,7 +12,7 @@ namespace Gambonanza.Coop
         public const string HelloAck = "HELLOACK";    // fw|mod|game|persona
         public const string RunStart = "RUNSTART";    // seed|difficulty|strain|activeStrains|activeBonus|betterAI|tmpStrain|tmpBonus|actStrain|unlockCsv
         public const string State = "STATE";          // prevState|curState  (host -> guest advancement)
-        public const string Move = "MOVE";            // seat|fromKind|a|b|toR|toC|promo(0/1)
+        public const string Move = "MOVE";            // seat|fromKind|a|b|toR|toC|kind(0 normal/1 promoting/2 free/3 end-tile-skip)
         public const string Drop = "DROP";            // seat|stockIdx|toR|toC
         public const string Place = "PLACE";          // seat|fromKind|a|b|toKind|a|b
         public const string Promo = "PROMO";          // toR|toC|pieceType|cost

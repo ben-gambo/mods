@@ -104,6 +104,9 @@ Restart the game after a co-op session to reload the restored save.
   yet mirrored**: the purchase syncs, but the ball physics is local and the
   outcomes can differ. Treat pachinko as unsupported for now.
 - Twitch chaos mode is not supported.
+- The *Sleepy Promotion* and *Skydiver* gambits' extra promotion pickers are not
+  mirrored yet - in co-op they open on both clients independently. Avoid buying
+  those two.
 - Gambit *placement* is not mirrored — buying is, and buying is what activates a
   gambit, so this only affects rearranging slots by hand.
 - If the two boards ever diverge you get a `DESYNC` warning in the console.
