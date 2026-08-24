@@ -23,20 +23,97 @@ namespace Gambonanza.Coop
     {
         public const string OpPick = "p";
         public const string OpClose = "c";
+        public const string OpPool = "o";
         public const string ModeTake = "t";
         public const string ModeSell = "l";
 
         private readonly Action<string> _send;
+        private readonly Func<bool> _isHost;
         private bool _applyingRemote;
+
+        private bool _net_IsHost => _isHost != null && _isHost();
 
         private bool _inGacha;
         private bool _picked;
+        private bool _poolSent;          // host: this capsule's contents have been relayed
+        private bool _poolApplied;       // guest: the host's contents are in place
+        private string _pendingPool;     // guest: contents that arrived before the canvas existed
         private readonly bool[] _seenTaken = new bool[8];
         private readonly bool[] _seenSold = new bool[8];
 
-        public CoopGachapon(Action<string> send)
+        public CoopGachapon(Action<string> send, Func<bool> isHost)
         {
             _send = send;
+            _isHost = isHost;
+        }
+
+        /// <summary>
+        /// Host: relay the capsule's exact contents. The rarity roll and the gambit draw are
+        /// both seeded, so in principle the guest rolls the same three - but "in principle"
+        /// has been wrong twice in this mod already (strains, unlocks), and the draw filters
+        /// by unlock state, which lives in runtime-only game state. Sending the indices makes
+        /// the host's capsule the capsule, whatever the guest's own library thinks.
+        /// </summary>
+        private void TickHostPool(CanvasGachapon canvas)
+        {
+            if (_poolSent) return;
+            var gambits = GameRefl.GetField(canvas, "m_Gambits") as System.Collections.Generic.List<SO_Gambit>;
+            if (gambits == null || gambits.Count == 0) return;   // Initialize has not run yet
+
+            var lib = SingletonMonoBehaviour<GambitLibrary>.Instance;
+            if (lib == null) return;
+            var idx = new System.Collections.Generic.List<string>(gambits.Count);
+            foreach (var g in gambits) idx.Add(lib.GambitsInfo.IndexOf(g).ToString());
+
+            int rarity = (int)(GameRefl.GetField(canvas, "m_CurrentRarity") ?? 0);
+            _poolSent = true;
+            _send(Msg.Make(Msg.Gacha, OpPool, rarity, string.Join(",", idx)));
+            CoopLog.Debug($"relayed gachapon pool (rarity {rarity}): {string.Join(",", idx)}");
+        }
+
+        /// <summary>Guest: apply the host's contents as soon as both the message and the
+        /// canvas are available - either order.</summary>
+        private void TickGuestPool(CanvasGachapon canvas)
+        {
+            if (_poolApplied || _pendingPool == null) return;
+            var gambits = GameRefl.GetField(canvas, "m_Gambits") as System.Collections.Generic.List<SO_Gambit>;
+            if (gambits == null) return;
+            ApplyPool(canvas, _pendingPool);
+        }
+
+        private void ApplyPool(CanvasGachapon canvas, string payload)
+        {
+            var lib = SingletonMonoBehaviour<GambitLibrary>.Instance;
+            if (lib == null) return;
+
+            var parts = payload.Split('|');
+            int rarity = 0;
+            int.TryParse(parts[0], out rarity);
+
+            var picked = new System.Collections.Generic.List<SO_Gambit>();
+            var indices = new System.Collections.Generic.List<int>();
+            foreach (var t in parts[1].Split(','))
+            {
+                if (!int.TryParse(t, out var i)) continue;
+                if (i < 0 || i >= lib.GambitsInfo.Count)
+                {
+                    CoopLog.Warn($"gachapon pool: index {i} out of range - the peer has a different game build.");
+                    continue;
+                }
+                // Straight out of the full library: no unlock filter anywhere on this path,
+                // which is exactly the point - P2 gets the host's cards either way.
+                picked.Add(lib.GambitsInfo[i]);
+                indices.Add(i);
+            }
+            if (picked.Count == 0) { CoopLog.Warn("gachapon pool: nothing usable in the host's list."); return; }
+
+            GameRefl.SetField(canvas, "m_Gambits", picked);
+            GameRefl.SetField(canvas, "m_CurrentRarity", (Rarity)rarity);
+            DataManager.Instance.Data.GambitsGachapon = indices.ToArray();
+
+            _poolApplied = true;
+            _pendingPool = null;
+            CoopLog.Debug($"applied host gachapon pool: {picked.Count} gambits, rarity {rarity}");
         }
 
         private static CanvasGachapon Canvas
@@ -98,6 +175,9 @@ namespace Gambonanza.Coop
             var choices = Choices(canvas);
             if (choices.Length == 0) return;
 
+            if (_net_IsHost) TickHostPool(canvas);
+            else TickGuestPool(canvas);
+
             if (!_inGacha)
             {
                 // Baseline from CURRENT state, not false: the choices are serialized prefab
@@ -150,6 +230,9 @@ namespace Gambonanza.Coop
             bool skipped = !_picked;
             _inGacha = false;
             _picked = false;
+            _poolSent = false;
+            _poolApplied = false;
+            _pendingPool = null;
             if (skipped && !_applyingRemote)
             {
                 _send(Msg.Make(Msg.Gacha, OpClose));
@@ -170,6 +253,11 @@ namespace Gambonanza.Coop
             {
                 switch (op)
                 {
+                    case OpPool:
+                        // Arrives within a frame or two of the state flip and always well
+                        // before ShowContainerAnimation (2s) reads the contents.
+                        if (!_net_IsHost) { _pendingPool = Msg.S(p, 2) + "|" + Msg.S(p, 3); TickGuestPool(canvas); }
+                        break;
                     case OpPick: ApplyPick(canvas, Msg.I(p, 2), Msg.S(p, 3)); break;
                     case OpClose: ApplyClose(canvas); break;
                 }
@@ -223,6 +311,9 @@ namespace Gambonanza.Coop
         {
             _inGacha = false;
             _picked = false;
+            _poolSent = false;
+            _poolApplied = false;
+            _pendingPool = null;
         }
     }
 }

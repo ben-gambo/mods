@@ -17,7 +17,7 @@ namespace Gambonanza.Coop
     /// </summary>
     internal sealed class CoopSession
     {
-        public const string ProtocolVersion = "6";
+        public const string ProtocolVersion = "7";
 
         private readonly CoopNet _net;
         private readonly CoopVisuals _vis;
@@ -47,6 +47,7 @@ namespace Gambonanza.Coop
         private float _checkClock;
         private TileBehaviour _lastLocalHover;
         private string _saveSnapshot;
+        private System.Collections.Generic.HashSet<string> _unlockSnapshot;
 
         // enemy-move observation (host side)
         private Action<BasePieceBehaviour, TileBehaviour> _enemyMoveHandler;
@@ -76,7 +77,7 @@ namespace Gambonanza.Coop
             _shop = new CoopShop(s => _net.Send(s));
             _wheel = new CoopWheel(s => _net.Send(s));
             _startWheel = new CoopStartWheel(s => _net.Send(s));
-            _gacha = new CoopGachapon(s => _net.Send(s));
+            _gacha = new CoopGachapon(s => _net.Send(s), () => _net.IsHost);
 
             _net.OnPeerJoined += HandlePeerJoined;
             _net.OnPeerLeft += HandlePeerLeft;
@@ -102,12 +103,33 @@ namespace Gambonanza.Coop
         {
             CoopLog.Warn("peer disconnected - co-op session ended, returning to solo rules.");
             EndSession(restoreSave: true);
+            _net.LeaveLobby();
         }
 
         private static string SteamPersona()
         {
             try { return Steamworks.SteamFriends.GetPersonaName(); }
             catch { return "player"; }
+        }
+
+        /// <summary>
+        /// Ends the co-op session for BOTH players and leaves the Steam lobby. This is the
+        /// only exit door: the console command, the panel button, quitting to the main menu
+        /// and closing the game all come through here, so a party never outlives the run it
+        /// belongs to.
+        ///
+        /// BYE is the fast notification; it can be lost if Steam tears the P2P session down
+        /// before it flushes (closing the game especially), which is why the peer ALSO learns
+        /// of the departure from the lobby itself - LobbyChatUpdate fires OnPeerLeft, and
+        /// Steam drops a dead process's membership on its own. Both paths land on EndSession.
+        /// </summary>
+        public void LeaveParty()
+        {
+            if (Phase != Phase.Idle || _net.LobbyId != Steamworks.CSteamID.Nil)
+                CoopLog.Info("leaving the co-op party.");
+            if (_net.Connected) _net.Send(Msg.Make(Msg.Bye));
+            EndSession(restoreSave: true);
+            _net.LeaveLobby();
         }
 
         public void EndSession(bool restoreSave)
@@ -126,6 +148,7 @@ namespace Gambonanza.Coop
             _vis.HideBadges();
             _vis.HideRemoteCursor();
             UnlockInput();
+            RestoreUnlockSnapshot();
             _turnBannerText = null;
             _localWaitPending = false;
             _pendingRemotePromotion = null;
@@ -193,7 +216,27 @@ namespace Gambonanza.Coop
                         strainMgr.TemporaryBonus[i] = i < activeBonus.Length && activeBonus[i];
                 strainMgr.SetUpStrains();   // Temporary* -> Activated*, the game's own copy
             }
-            if (unlockedGambits != null) data.GambitUnlocked = new List<string>(unlockedGambits);
+            if (unlockedGambits != null)
+            {
+                data.GambitUnlocked = new List<string>(unlockedGambits);
+
+                // Writing Data.GambitUnlocked is NOT enough - the same trap the strains had.
+                // Every unlock query goes through GambitUnlockManager.IsUnlocked, which reads a
+                // runtime HashSet populated once at boot by LoadFromSave; nothing re-reads the
+                // save mid-session. So the guest kept filtering the shop AND the gachapon by
+                // ITS OWN unlocks: two different pools from the same seed. Pushing the host's
+                // list into that set is what actually makes "the host's collection is the
+                // run's collection" true - the guest effectively has the host's gambits
+                // unlocked for the duration of the run, and only for the duration.
+                var gum = SingletonMonoBehaviour<GambitUnlockManager>.Instance;
+                if (gum != null)
+                {
+                    if (_unlockSnapshot == null)
+                        _unlockSnapshot = new System.Collections.Generic.HashSet<string>(gum.UnlockedGambits);
+                    gum.UnlockedGambits = new System.Collections.Generic.HashSet<string>(unlockedGambits);
+                    CoopLog.Info($"using the host's gambit collection for this run ({unlockedGambits.Count} unlocked).");
+                }
+            }
 
             // BetterAI changes both the enemy AI branch and crumble timing - force it equal.
             if (DataManager.Instance.SettingData != null)
@@ -353,6 +396,18 @@ namespace Gambonanza.Coop
         {
             if (Phase != Phase.Running) return;
 
+            // Checked BEFORE the pause guard below: quitting to the main menu goes through the
+            // pause menu (PauseMenu.CloseAndBackToMainMenu -> GameManager.Menu), so it arrives
+            // with PreviousState == PAUSE and the guard would swallow it - the run would end
+            // on this screen while the peer sat in a session with nobody in it.
+            if (state == State.MENU)
+            {
+                _vis.HideBadges();
+                CoopLog.Info("back to the main menu - ending the co-op party.");
+                LeaveParty();
+                return;
+            }
+
             // The game re-enters INGAME on pause/settings/run-info close and after promotion,
             // none of which are replicated. Every game-side listener guards against exactly
             // this (TurnManager.cs:80, EnemyManager.cs:97); without the guard, opening the
@@ -401,10 +456,6 @@ namespace Gambonanza.Coop
                 ClearStaleTurnFlags();
                 if (state != State.WIN) _vis.HideBadges();
                 if (state == State.WIN) _income.ShowShareOnWinScreen(_runner);
-            }
-            else if (state == State.MENU)
-            {
-                _vis.HideBadges();
             }
         }
 
@@ -1064,8 +1115,9 @@ namespace Gambonanza.Coop
                         HandleCheck(p);
                         break;
                     case Msg.Bye:
-                        CoopLog.Warn("peer ended the co-op session.");
+                        CoopLog.Warn("your partner left - the co-op party is over.");
                         EndSession(restoreSave: true);
+                        _net.LeaveLobby();   // don't strand this client in a dead lobby
                         break;
                 }
             }
@@ -1486,6 +1538,16 @@ namespace Gambonanza.Coop
             // between phases.
             else if (ActiveSeat != -1 && DataManager.Instance.Data.RoundCount != round)
                 CoopLog.Warn($"round drift: host {round}, local {DataManager.Instance.Data.RoundCount}");
+        }
+
+        /// <summary>Puts this player's own gambit collection back after a co-op run.</summary>
+        private void RestoreUnlockSnapshot()
+        {
+            if (_unlockSnapshot == null) return;
+            var gum = SingletonMonoBehaviour<GambitUnlockManager>.Instance;
+            if (gum != null) gum.UnlockedGambits = _unlockSnapshot;
+            _unlockSnapshot = null;
+            CoopLog.Debug("restored your own gambit collection");
         }
 
         // ---------- save protection ----------

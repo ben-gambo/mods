@@ -96,7 +96,7 @@ namespace Gambonanza.Coop
                     onHost: () => { _net.HostLobby(); Refresh(); },
                     onInvite: () => { _net.OpenInviteDialog(); Refresh(); },
                     onStart: () => { _session.HostStartRun(); _panel.Hide(); },
-                    onLeave: () => { _session.EndSession(restoreSave: true); _net.LeaveLobby(); Refresh(); },
+                    onLeave: () => { _session.LeaveParty(); Refresh(); },
                     onClose: () => _panel.Hide()))
             {
                 CoopLog.Warn("could not build the co-op panel (menu parts unavailable).");

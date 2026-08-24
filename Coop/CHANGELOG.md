@@ -3,6 +3,22 @@ Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice.
 Unzip into your game's `Mods/` folder. **Both players need this version** — the
 wire protocol changed, so 0.0.3 refuses to play with 0.0.2 rather than desyncing.
 
+## 0.0.8
+
+- **The host's gambit collection is now the run's collection.** The run-start
+  message always carried the host's unlocks, but the game answers every "is this
+  unlocked?" from a list it builds once at startup and never re-reads - so each
+  client was quietly filtering the shop *and* the gachapon by its own collection.
+  P2 now plays the run with the host's gambits unlocked (and gets their own back
+  when the session ends).
+- **The gachapon capsule is dictated by the host** - its rarity and its three
+  cards travel over the wire, so both of you open the same capsule whatever
+  either library thinks.
+- **Leaving kills the party.** Quitting to the main menu or closing the game now
+  ends the co-op session for both players and drops the Steam lobby. Nothing
+  ever announced a departure before: the message existed but nobody sent it, so
+  the other player was left in a session with no one in it.
+
 ## 0.0.7
 
 - **Sleepy Promotion works in co-op.** The wait-to-promote picker now belongs to

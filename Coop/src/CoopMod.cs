@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "0.0.7";
+        public const string ModVersion = "0.0.8";
 
         private IModContext _context;
         private CoopRunner _runner;
@@ -85,8 +85,7 @@ namespace Gambonanza.Coop
                             c.PrintInfo(_runner.Session.Status());
                             break;
                         case "leave":
-                            _runner.Session.EndSession(restoreSave: true);
-                            _runner.Net.LeaveLobby();
+                            _runner.Session.LeaveParty();
                             break;
                         case "verbose":
                             CoopLog.Verbose = !CoopLog.Verbose;
@@ -188,6 +187,12 @@ namespace Gambonanza.Coop
 
         public void OpenMenu() => _menu?.Open();
 
+        /// <summary>Closing the game ends the party too - the peer is told before we go.</summary>
+        private void OnApplicationQuit()
+        {
+            Session?.LeaveParty();
+        }
+
         public void TearDown()
         {
             var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
@@ -197,7 +202,7 @@ namespace Gambonanza.Coop
             _hookedSelect = false;
 
             _menu?.Teardown();
-            Session?.EndSession(restoreSave: true);
+            Session?.LeaveParty();
             Net?.Teardown();
             _visuals?.Teardown();
         }

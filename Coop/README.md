@@ -22,6 +22,9 @@ Press **CO-OP** in the main menu, next to Play. Everything lives in that panel:
 3. **Start the run** — host only, once both of you are in.
 4. **Leave** — ends the session and restores your solo save.
 
+Quitting to the main menu or closing the game ends the party too, for both of
+you — the lobby is dropped and each player goes back to their own save.
+
 The panel shows which seat you are, who you are playing with, and what to do
 next.
 
@@ -76,7 +79,12 @@ The host is authoritative for the things that cannot be reproduced remotely:
 
 - **The seed.** Sent at run start along with the difficulty, strains and the
   host's unlocked-gambit list, so both clients generate the same waves and the
-  same shops. If the host hasn't unlocked a gambit, neither of you will see it.
+  same shops. The host's collection *is* the run's collection: if the host
+  hasn't unlocked a gambit neither of you sees it, and anything the host has
+  unlocked is available to both of you for the run even if P2 hasn't earned it
+  yet. P2 gets their own collection back when the session ends.
+- **The gachapon capsule**, sent card by card, so an unlock difference can never
+  put different gambits in front of the two of you.
 - **The enemy AI.** Its move selection uses unseeded `UnityEngine.Random`, so it
   can't be replayed from a seed. The host picks each enemy move and sends the
   coordinates; the guest replays it through the game's own move routine.
