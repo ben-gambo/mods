@@ -91,15 +91,24 @@ Restart the game after a co-op session to reload the restored save.
 - Two players. The lobby is capped at 2.
 - Both sides need the same mod version and the same game build; mismatches are
   refused at handshake.
-- **Token minigames** (gachapon, wheel, pachinko) are not mirrored. The purchase
-  itself syncs, so both of you spend the same coins and enter the same minigame,
-  but you each make your own picks and the outcomes can differ. Treat tokens as
-  unsupported for now.
+- **The piece wheel is shared** — either player can hit STOP, and the piece you
+  take (or sell) lands on both clients. **Gachapon and pachinko are not yet
+  mirrored**: the purchase syncs, so both of you spend the same coins and enter
+  the same minigame, but you each make your own picks and the outcomes can
+  differ. Treat those two tokens as unsupported for now.
 - Twitch chaos mode is not supported.
 - Gambit *placement* is not mirrored — buying is, and buying is what activates a
   gambit, so this only affects rearranging slots by hand.
 - If the two boards ever diverge you get a `DESYNC` warning in the console.
   `coop leave` and restart the run.
+
+## The tutorial is off
+
+Gambonanza's tutorial drives the game directly — it locks shop buttons, forces
+particular gambits into the roll and takes over navigation — and none of that
+can be shared between two clients. With this mod installed the tutorial is
+suppressed, so a first-time player can host without the run coming apart. It is
+suppressed at runtime only; your save still says you haven't done it.
 
 ## Diagnostics
 

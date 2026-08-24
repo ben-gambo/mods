@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "0.0.2";
+        public const string ModVersion = "0.0.3";
 
         private IModContext _context;
         private CoopRunner _runner;
@@ -159,6 +159,8 @@ namespace Gambonanza.Coop
 
         private void Update()
         {
+            // The tutorial is off for as long as this mod is loaded - see CoopTutorial.
+            CoopTutorial.Tick();
             Net?.EnsureInstalled();
             Net?.Pump();
             Session?.Tick();

@@ -23,11 +23,16 @@ namespace Gambonanza.Coop
 
         private CoopNativeButton _homeButton;
         private float _retryClock;
+        private bool _openOnPeerJoined;
 
         public CoopMenu(CoopNet net, CoopSession session)
         {
             _net = net;
             _session = session;
+            // P2 accepts the invite from the Steam overlay and lands back on the home menu with
+            // nothing to show for it - no panel, no seat, no sign the lobby worked. Pop the
+            // panel for them (and for the host) the moment the peer resolves.
+            _net.OnPeerJoined += () => _openOnPeerJoined = true;
         }
 
         public void Tick()
@@ -51,6 +56,15 @@ namespace Gambonanza.Coop
                     _retryClock = 0.5f;
                     TryInjectButton();
                 }
+            }
+
+            // Wait for the home button: it is the proof that the menu canvas is assembled and
+            // that CoopMenuParts.Find() will succeed, so Open() cannot fail in a loop here.
+            if (_openOnPeerJoined && _homeButton != null)
+            {
+                Open();
+                if (_panel.IsOpen) _openOnPeerJoined = false;
+                return;
             }
 
             if (_panel.IsOpen) Refresh();

@@ -25,6 +25,7 @@ namespace Gambonanza.Coop
         public const string SellGambit = "SELLG";     // slotIndex
         public const string GambitArr = "GARR";       // csv of gambit ids per slot ('-' = empty)
         public const string Check = "CHECK";          // wave|round|coins|hash
+        public const string Wheel = "WHEEL";         // op(s/p/c)|slot|mode  (piece wheel)
         public const string Cursor = "CURSOR";        // x|y|hoverR|hoverC|selKind|a|b   (unreliable ch.1)
         public const string Wait = "WAIT";           // seat
         public const string Bye = "BYE";

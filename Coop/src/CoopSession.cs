@@ -17,11 +17,12 @@ namespace Gambonanza.Coop
     /// </summary>
     internal sealed class CoopSession
     {
-        public const string ProtocolVersion = "1";
+        public const string ProtocolVersion = "2";
 
         private readonly CoopNet _net;
         private readonly CoopVisuals _vis;
         private readonly CoopShop _shop;
+        private readonly CoopWheel _wheel;
         private readonly CoopIncome _income;
         private readonly MonoBehaviour _runner;
 
@@ -61,6 +62,7 @@ namespace Gambonanza.Coop
             _runner = runner;
             _income = new CoopIncome();
             _shop = new CoopShop(s => _net.Send(s));
+            _wheel = new CoopWheel(s => _net.Send(s));
 
             _net.OnPeerJoined += HandlePeerJoined;
             _net.OnPeerLeft += HandlePeerLeft;
@@ -103,6 +105,7 @@ namespace Gambonanza.Coop
             _income.Uninstall();
             UnhookGameEvents();
             _shop.Unhook();
+            _wheel.Reset();
             _vis.ClearTints();
             _vis.HideBadges();
             _vis.HideRemoteCursor();
@@ -162,6 +165,7 @@ namespace Gambonanza.Coop
             ActiveSeat = 0;
             _enemyTurnsDone = 0;
             _vis.ClearOwners();
+            _wheel.Reset();
 
             _income.Install();
             _income.Enabled = true;
@@ -539,7 +543,7 @@ namespace Gambonanza.Coop
             TickCursor();
             TickChecksum();
             TickLocalBadge();
-            if (Phase == Phase.Running) _shop.Tick();
+            if (Phase == Phase.Running) { _shop.Tick(); _wheel.Tick(); }
         }
 
         private void TickLocalBadge()
@@ -650,6 +654,9 @@ namespace Gambonanza.Coop
                         break;
                     case Msg.Limit:
                         _shop.ApplyLimit();
+                        break;
+                    case Msg.Wheel:
+                        _wheel.Apply(p);
                         break;
                     case Msg.Check:
                         HandleCheck(p);
