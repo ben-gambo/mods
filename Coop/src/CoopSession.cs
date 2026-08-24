@@ -17,12 +17,13 @@ namespace Gambonanza.Coop
     /// </summary>
     internal sealed class CoopSession
     {
-        public const string ProtocolVersion = "2";
+        public const string ProtocolVersion = "3";
 
         private readonly CoopNet _net;
         private readonly CoopVisuals _vis;
         private readonly CoopShop _shop;
         private readonly CoopWheel _wheel;
+        private readonly CoopStartWheel _startWheel;
         private readonly CoopIncome _income;
         private readonly MonoBehaviour _runner;
 
@@ -54,6 +55,10 @@ namespace Gambonanza.Coop
         private Action _playerTurnHandler;       // fires on EVERY exit from EnemyManager._Play
         private Action _waitHandler;             // the in-battle Wait button
         private Action<PieceType> _promoteIntoHandler;
+        private Action<BasePieceBehaviour> _placementHandler;
+        private Action<BasePieceBehaviour> _sellPieceHandler;
+        private Action<GambitBehaviour> _sellGambitHandler;
+        private bool _suppressGoRelay;   // set while a remote GO is being applied
 
         public CoopSession(CoopNet net, CoopVisuals vis, MonoBehaviour runner)
         {
@@ -63,6 +68,7 @@ namespace Gambonanza.Coop
             _income = new CoopIncome();
             _shop = new CoopShop(s => _net.Send(s));
             _wheel = new CoopWheel(s => _net.Send(s));
+            _startWheel = new CoopStartWheel(s => _net.Send(s));
 
             _net.OnPeerJoined += HandlePeerJoined;
             _net.OnPeerLeft += HandlePeerLeft;
@@ -106,6 +112,7 @@ namespace Gambonanza.Coop
             UnhookGameEvents();
             _shop.Unhook();
             _wheel.Reset();
+            _startWheel.Reset();
             _vis.ClearTints();
             _vis.HideBadges();
             _vis.HideRemoteCursor();
@@ -166,6 +173,7 @@ namespace Gambonanza.Coop
             _enemyTurnsDone = 0;
             _vis.ClearOwners();
             _wheel.Reset();
+            _startWheel.Reset();
 
             _income.Install();
             _income.Enabled = true;
@@ -193,6 +201,24 @@ namespace Gambonanza.Coop
                 // promoting pawn move.
                 _hasPlayedHandler = OnLocalTurnEnded;
                 sel.OnPlayerMadeAnActionThatEndsItsTurn = (Action)Delegate.Combine(sel.OnPlayerMadeAnActionThatEndsItsTurn, _hasPlayedHandler);
+
+                // Fires on every committed placement rearrangement - stock<->board, both
+                // directions, swaps included (SelectionManager.cs:663-679, 1081-1114). The
+                // destination is already committed when it fires; the origin is the pickup
+                // address NotePickup recorded, because placement pickups go through the same
+                // SelectPiece path as battle ones.
+                _placementHandler = OnLocalPlacementMove;
+                sel.OnMoveInBoardPlacement = (Action<BasePieceBehaviour>)Delegate.Combine(sel.OnMoveInBoardPlacement, _placementHandler);
+            }
+            var sm = SingletonMonoBehaviour<SellManager>.Instance;
+            if (sm != null)
+            {
+                // Both fire AFTER the vanilla gates passed and the wallet was paid, right
+                // before the object is destroyed - the address is still resolvable.
+                _sellPieceHandler = OnLocalSellPiece;
+                sm.OnSellPiece = (Action<BasePieceBehaviour>)Delegate.Combine(sm.OnSellPiece, _sellPieceHandler);
+                _sellGambitHandler = OnLocalSellGambit;
+                sm.OnSellGambit = (Action<GambitBehaviour>)Delegate.Combine(sm.OnSellGambit, _sellGambitHandler);
             }
             if (em != null)
             {
@@ -236,6 +262,16 @@ namespace Gambonanza.Coop
             var gm = SingletonMonoBehaviour<GameManager>.Instance;
             if (sel != null && _hasPlayedHandler != null)
                 sel.OnPlayerMadeAnActionThatEndsItsTurn = (Action)Delegate.Remove(sel.OnPlayerMadeAnActionThatEndsItsTurn, _hasPlayedHandler);
+            if (sel != null && _placementHandler != null)
+                sel.OnMoveInBoardPlacement = (Action<BasePieceBehaviour>)Delegate.Remove(sel.OnMoveInBoardPlacement, _placementHandler);
+            var smU = SingletonMonoBehaviour<SellManager>.Instance;
+            if (smU != null)
+            {
+                if (_sellPieceHandler != null)
+                    smU.OnSellPiece = (Action<BasePieceBehaviour>)Delegate.Remove(smU.OnSellPiece, _sellPieceHandler);
+                if (_sellGambitHandler != null)
+                    smU.OnSellGambit = (Action<GambitBehaviour>)Delegate.Remove(smU.OnSellGambit, _sellGambitHandler);
+            }
             if (em != null && _enemyMoveHandler != null)
                 em.OnMove = (Action<BasePieceBehaviour, TileBehaviour>)Delegate.Remove(em.OnMove, _enemyMoveHandler);
             if (gm != null && _stateHandler != null)
@@ -253,6 +289,7 @@ namespace Gambonanza.Coop
             _selMoveHandler = null; _selCaptureHandler = null; _selPlaceHandler = null;
             _hasPlayedHandler = null; _enemyMoveHandler = null; _stateHandler = null;
             _playerTurnHandler = null; _waitHandler = null; _promoteIntoHandler = null;
+            _placementHandler = null; _sellPieceHandler = null; _sellGambitHandler = null;
         }
 
         private void OnGameStateChanged(State state)
@@ -271,6 +308,14 @@ namespace Gambonanza.Coop
 
             if (state == State.INGAME)
             {
+                // Entering battle from placement is the GO button. Relay it so the peer's
+                // client leaves placement too - otherwise one player fights while the other
+                // is still rearranging, and every in-battle message lands in the wrong state.
+                if (gmS != null && gmS.PreviousState == State.BOARD_PLACEMENT)
+                {
+                    if (_suppressGoRelay) _suppressGoRelay = false;   // this INGAME is the remote GO
+                    else _net.Send(Msg.Make(Msg.Go));
+                }
                 _enemyTurnsDone = 0;
                 ActiveSeat = 0;
                 ClearStaleTurnFlags();
@@ -387,6 +432,53 @@ namespace Gambonanza.Coop
             _net.Send(Msg.Make(Msg.Wait, LocalSeat));
             CoopLog.Debug("sent wait");
             AdvanceTurnAfterPlayerAction();
+        }
+
+        /// <summary>
+        /// A committed placement rearrangement. No turn bookkeeping - placement is free-form
+        /// and both players may shuffle pieces at once. First write wins per tile; the 5s
+        /// checksum flags the (rare) case of both grabbing the same piece simultaneously.
+        /// </summary>
+        private void OnLocalPlacementMove(BasePieceBehaviour piece)
+        {
+            if (_applyingRemote || Phase != Phase.Running || piece == null) return;
+
+            var from = _lastPickupAddress;
+            if (from.kind == CoopBoard.KindNone) { CoopLog.Warn("placement move with no pickup address - not relayed."); return; }
+            if (!CoopBoard.TryLocate(piece, out var toK, out var toA, out var toB)) return;
+            if (from.kind == toK && from.a == toA && from.b == toB) return;   // dropped back in place
+
+            _net.Send(Msg.Make(Msg.Place, LocalSeat, from.kind, from.a, from.b, toK, toA, toB));
+            CoopLog.Debug($"sent placement {from.kind}{from.a},{from.b} -> {toK}{toA},{toB}");
+        }
+
+        private void OnLocalSellPiece(BasePieceBehaviour piece)
+        {
+            if (_applyingRemote || Phase != Phase.Running || piece == null) return;
+            if (!CoopBoard.TryLocate(piece, out var k, out var a, out var b))
+            {
+                CoopLog.Warn("sold a piece with no resolvable address - peer will drift.");
+                return;
+            }
+            _net.Send(Msg.Make(Msg.Sell, k, a, b));
+            CoopLog.Debug($"sent piece sell {k}{a},{b}");
+        }
+
+        private void OnLocalSellGambit(GambitBehaviour gambit)
+        {
+            if (_applyingRemote || Phase != Phase.Running || gambit == null) return;
+            var places = SingletonMonoBehaviour<GambitManager>.Instance?.GambitPlaces;
+            if (places == null) return;
+            for (int i = 0; i < places.Length; i++)
+            {
+                if (places[i] != null && ReferenceEquals(places[i].CurrentGambit, gambit))
+                {
+                    _net.Send(Msg.Make(Msg.SellGambit, i));
+                    CoopLog.Debug($"sent gambit sell, slot {i}");
+                    return;
+                }
+            }
+            CoopLog.Warn("sold a gambit not found in any slot - peer will drift.");
         }
 
         // ---------- turn director ----------
@@ -543,7 +635,7 @@ namespace Gambonanza.Coop
             TickCursor();
             TickChecksum();
             TickLocalBadge();
-            if (Phase == Phase.Running) { _shop.Tick(); _wheel.Tick(); }
+            if (Phase == Phase.Running) { _shop.Tick(); _wheel.Tick(); _startWheel.Tick(); }
         }
 
         private void TickLocalBadge()
@@ -658,6 +750,21 @@ namespace Gambonanza.Coop
                     case Msg.Wheel:
                         _wheel.Apply(p);
                         break;
+                    case Msg.StartWheel:
+                        _startWheel.Apply(p);
+                        break;
+                    case Msg.Place:
+                        HandleRemotePlace(p);
+                        break;
+                    case Msg.Go:
+                        HandleRemoteGo();
+                        break;
+                    case Msg.Sell:
+                        HandleRemoteSellPiece(p);
+                        break;
+                    case Msg.SellGambit:
+                        HandleRemoteSellGambit(p);
+                        break;
                     case Msg.Check:
                         HandleCheck(p);
                         break;
@@ -768,6 +875,86 @@ namespace Gambonanza.Coop
             finally { _applyingRemote = false; }
 
             AdvanceTurnAfterPlayerAction();
+        }
+
+        private void HandleRemotePlace(string[] p)
+        {
+            char fromK = Msg.S(p, 2).Length > 0 ? Msg.S(p, 2)[0] : CoopBoard.KindBoard;
+            int fromA = Msg.I(p, 3), fromB = Msg.I(p, 4);
+            char toK = Msg.S(p, 5).Length > 0 ? Msg.S(p, 5)[0] : CoopBoard.KindBoard;
+            int toA = Msg.I(p, 6), toB = Msg.I(p, 7);
+
+            var piece = CoopBoard.PieceAt(fromK, fromA, fromB);
+            var target = CoopBoard.Resolve(toK, toA, toB);
+            if (piece == null || target == null)
+            {
+                CoopLog.Warn($"remote placement unresolved ({fromK}{fromA},{fromB} -> {toK}{toA},{toB}) - possible desync.");
+                return;
+            }
+
+            _applyingRemote = true;
+            try { CoopBoard.ApplyPlacement(piece, target); }
+            finally { _applyingRemote = false; }
+        }
+
+        /// <summary>
+        /// The peer pressed GO. Mirror it through CanvasPreparation.Ready() - the vanilla
+        /// route into battle - forcing its private m_Ready gate, which on the peer's client
+        /// was legitimately open. A locally held piece is released first so the transition
+        /// does not tear a drag in half.
+        /// </summary>
+        private void HandleRemoteGo()
+        {
+            var gm = SingletonMonoBehaviour<GameManager>.Instance;
+            if (gm == null || gm.CurrentState != State.BOARD_PLACEMENT) return;   // already in battle
+
+            var sel = SingletonMonoBehaviour<SelectionManager>.Instance;
+            if (sel != null && sel.CurrentPiece != null) sel.ForceRelease();
+
+            var prep = SingletonMonoBehaviour<CanvasPreparation>.Instance;
+            if (prep == null) { CoopLog.Warn("GO arrived but no CanvasPreparation"); return; }
+
+            _suppressGoRelay = true;
+            GameRefl.SetField(prep, "m_Ready", true);
+            prep.Ready();
+            CoopLog.Debug("applied remote GO");
+        }
+
+        private void HandleRemoteSellPiece(string[] p)
+        {
+            char k = Msg.S(p, 1).Length > 0 ? Msg.S(p, 1)[0] : CoopBoard.KindBoard;
+            int a = Msg.I(p, 2), b = Msg.I(p, 3);
+            var piece = CoopBoard.PieceAt(k, a, b);
+            if (piece == null)
+            {
+                CoopLog.Warn($"remote piece sell unresolved ({k}{a},{b}) - possible desync.");
+                return;
+            }
+            var smS = SingletonMonoBehaviour<SellManager>.Instance;
+            if (smS != null && !smS.CanSell())
+                CoopLog.Warn("DESYNC RISK: peer sold a piece but selling is refused here (last piece).");
+
+            _applyingRemote = true;
+            try { piece.Sell(); }   // the vanilla path: wallet, effects, destroy
+            catch (Exception ex) { CoopLog.Error($"piece sell replay failed: {ex.Message}"); }
+            finally { _applyingRemote = false; }
+        }
+
+        private void HandleRemoteSellGambit(string[] p)
+        {
+            int slot = Msg.I(p, 1, -1);
+            var places = SingletonMonoBehaviour<GambitManager>.Instance?.GambitPlaces;
+            var gambit = places != null && slot >= 0 && slot < places.Length && places[slot] != null
+                ? places[slot].CurrentGambit : null;
+            if (gambit == null)
+            {
+                CoopLog.Warn($"remote gambit sell unresolved (slot {slot}) - possible desync.");
+                return;
+            }
+            _applyingRemote = true;
+            try { gambit.Sell(); }
+            catch (Exception ex) { CoopLog.Error($"gambit sell replay failed: {ex.Message}"); }
+            finally { _applyingRemote = false; }
         }
 
         /// <summary>Mirrors the peer's promotion choice through the game's own promote path.</summary>

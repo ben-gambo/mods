@@ -16,6 +16,10 @@ namespace Gambonanza.Coop
         // P1 = red (host), P2 = blue (guest)
         public static readonly Color P1 = new Color(0.93f, 0.28f, 0.28f);
         public static readonly Color P2 = new Color(0.29f, 0.55f, 0.96f);
+        // The corner labels sit on the tile art itself, where the bright badge colours wash
+        // out - a darker cut of the same hue reads at that size.
+        public static readonly Color P1Label = new Color(0.52f, 0.10f, 0.10f);
+        public static readonly Color P2Label = new Color(0.10f, 0.24f, 0.52f);
 
         private const int BadgeOrder = 9;     // under pieces (10) but above tile feedback (base+2)
         private const int CursorOrder = 300;  // above everything world-space
@@ -78,6 +82,7 @@ namespace Gambonanza.Coop
             txt = label.AddComponent<TextMeshPro>();
             txt.text = "P1";
             txt.fontSize = 2.2f;
+            txt.fontStyle = FontStyles.Bold;
             txt.alignment = TextAlignmentOptions.Center;
             txt.textWrappingMode = TextWrappingModes.NoWrap;
             txt.raycastTarget = false;
@@ -106,7 +111,7 @@ namespace Gambonanza.Coop
             var color = seat == 0 ? P1 : P2;
             sr.color = new Color(color.r, color.g, color.b, remote ? 0.95f : 0.75f);
             txt.text = seat == 0 ? "P1" : "P2";
-            txt.color = color;
+            txt.color = seat == 0 ? P1Label : P2Label;
 
             var p = tile.transform.position;
             go.transform.position = new Vector3(p.x, p.y, -3f);

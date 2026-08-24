@@ -36,6 +36,11 @@ next.
 
 **P1 moves → P2 moves → the enemy moves twice.**
 
+Before the battle, the setup phase is fully shared: both players can rearrange
+pieces between stock and board at the same time, every move mirrors to the other
+client, and either player's **GO** launches the battle for both. The run-start
+piece wheel is shared too — either player can hit STOP.
+
 Both players see each other's cursor live, and the tile a player is holding a
 piece over gets their coloured badge with a `P1`/`P2` corner label. Your own
 pieces carry a discreet tint in your colour, so a crowded board still reads at
@@ -51,7 +56,8 @@ the *identical* shop, because every shop roll in Gambonanza is a pure function
 of the run seed, the wave, and a per-name counter — so a purchase only has to
 travel as a slot number, not as an item.
 
-One wallet, spent by both of you. Rerolls and piece-limit upgrades sync too.
+One wallet, spent by both of you. Rerolls, piece-limit upgrades and **selling**
+(pieces and gambits) sync too.
 
 ## Income
 
@@ -91,11 +97,12 @@ Restart the game after a co-op session to reload the restored save.
 - Two players. The lobby is capped at 2.
 - Both sides need the same mod version and the same game build; mismatches are
   refused at handshake.
-- **The piece wheel is shared** — either player can hit STOP, and the piece you
-  take (or sell) lands on both clients. **Gachapon and pachinko are not yet
-  mirrored**: the purchase syncs, so both of you spend the same coins and enter
-  the same minigame, but you each make your own picks and the outcomes can
-  differ. Treat those two tokens as unsupported for now.
+- **Both piece wheels are shared** — the run-start one and the token-shop one.
+  Either player can hit STOP, and the piece taken (or sold) lands on both
+  clients. **Gachapon and pachinko are not yet mirrored**: the purchase syncs,
+  so both of you spend the same coins and enter the same minigame, but you each
+  make your own picks and the outcomes can differ. Treat those two tokens as
+  unsupported for now.
 - Twitch chaos mode is not supported.
 - Gambit *placement* is not mirrored — buying is, and buying is what activates a
   gambit, so this only affects rearranging slots by hand.

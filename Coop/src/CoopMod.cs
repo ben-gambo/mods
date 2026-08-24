@@ -15,7 +15,7 @@ namespace Gambonanza.Coop
     /// </summary>
     public sealed class CoopMod : IMod, IModLifecycle
     {
-        public const string ModVersion = "0.0.3";
+        public const string ModVersion = "0.0.4";
 
         private IModContext _context;
         private CoopRunner _runner;
