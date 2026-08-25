@@ -204,7 +204,7 @@ namespace Gambonanza.MoonGambit
             // The discovery IS the unlock.
             ModGambitApi.Unlock(EclipseId);
 
-            Debug.Log("[MoonGambit] the Moon crossed the Sun: merged into the Eclipse Gambit.");
+            Debug.Log("[MoonGambit] the Moon crossed the Sun: merged into the Eclipse's Gambit.");
             m_Merging = false;
         }
 

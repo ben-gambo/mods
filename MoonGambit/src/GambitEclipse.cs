@@ -9,7 +9,7 @@ using UnityEngine;
 namespace Gambonanza.MoonGambit
 {
     /// <summary>
-    /// Runtime behaviour of the Eclipse Gambit. Two halves:
+    /// Runtime behaviour of the Eclipse's Gambit. Two halves:
     ///
     /// 1. It still contains the Sun. Every time a KING is earned, a random
     ///    blank tile turns golden - a line-for-line port of Gambit_Sun's tile
