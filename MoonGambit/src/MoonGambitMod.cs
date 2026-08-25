@@ -44,7 +44,7 @@ namespace Gambonanza.MoonGambit
                 .Register();
 
             GambitBuilder.Create(MergeWatcher.EclipseId)
-                .WithName("Eclipse's Gambit")
+                .WithName("Eclipse Gambit")
                 .WithDescription(
                     "Earning a <b>KING</b> turns a tile <color=*>GOLDEN</color>.<br>" +
                     "<color=*>GOLDEN</color> tiles behave like <b>EVERY</b> tile.")

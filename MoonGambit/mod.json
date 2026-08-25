@@ -1,7 +1,7 @@
 {
     "id":           "MoonGambit",
     "name":         "Moon Gambit",
-    "version":      "1.0.1",
+    "version":      "1.0.2",
     "author":       "Ben",
     "entry":        "Gambonanza.MoonGambit.MoonGambitMod",
     "enabled":      true,

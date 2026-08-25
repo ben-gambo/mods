@@ -20,7 +20,7 @@ That's everything. Enjoy.
 The Moon does do something — just not on its own. If you own the Moon and the
 vanilla **Sun** gambit in the same run, drag one onto the other in the gambit
 tray. When the two celestial bodies align, both cards are consumed and the
-**Eclipse's Gambit** takes their place — which is also how it gets unlocked in
+**Eclipse Gambit** takes their place — which is also how it gets unlocked in
 your collection. After the first merge it can show up in shops like any other
 legendary, or you can keep making it the hard way.
 
