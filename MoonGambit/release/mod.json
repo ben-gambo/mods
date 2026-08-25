@@ -1,11 +1,13 @@
 {
-    "id":           "MoonGambit",
-    "name":         "Moon Gambit",
-    "version":      "1.0.2",
-    "author":       "Ben",
-    "entry":        "Gambonanza.MoonGambit.MoonGambitMod",
-    "enabled":      true,
-    "gameVersion":  ">=1.0",
-    "description":  "Adds the Moon Gambit, a legendary that does nothing at all. Surely it does something... right?",
-    "dependencies": ["GambitApi"]
+    "id": "MoonGambit",
+    "name": "Eclipse Gambit",
+    "version": "1.0.3",
+    "author": "Ben",
+    "entry": "Gambonanza.MoonGambit.MoonGambitMod",
+    "enabled": true,
+    "gameVersion": ">=1.0",
+    "description": "Adds the Moon's Gambit, a legendary that does nothing at all. Surely it does something... right?",
+    "dependencies": [
+        "GambitApi"
+    ]
 }

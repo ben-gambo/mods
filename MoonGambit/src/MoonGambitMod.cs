@@ -30,7 +30,7 @@ namespace Gambonanza.MoonGambit
             var eclipseSprite = ModGambitApi.LoadSprite(Path.Combine(context.ModDirectory, "eclipse.png"));
 
             GambitBuilder.Create(MergeWatcher.MoonId)
-                .WithName("Moon Gambit")
+                .WithName("Moon's Gambit")
                 // The whole card. No effect, no condition, no number. Priced
                 // like a legendary so buying it stays a real (terrible) decision.
                 .WithDescription("Surely this does<br>something... <i>right?</i>")
@@ -44,7 +44,7 @@ namespace Gambonanza.MoonGambit
                 .Register();
 
             GambitBuilder.Create(MergeWatcher.EclipseId)
-                .WithName("Eclipse Gambit")
+                .WithName("Eclipse's Gambit")
                 .WithDescription(
                     "Earning a <b>KING</b> turns a tile <color=*>GOLDEN</color>.<br>" +
                     "<color=*>GOLDEN</color> tiles behave like <b>EVERY</b> tile.")
