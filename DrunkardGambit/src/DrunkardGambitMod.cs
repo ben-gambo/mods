@@ -28,9 +28,10 @@ namespace Gambonanza.DrunkardGambit
             var def = GambitBuilder.Create("drunkard")
                 .WithName("Drunkard's Gambit")
                 // The © marker is the game's landing orange - where the piece
-                // lands is the whole card.
+                // lands is the whole card. ∆ is the bright green: SAFE means
+                // the stagger never lands on an enemy-threatened square.
                 .WithDescription(
-                    "After <b>CAPTURING</b>, the piece staggers<br>to a <color=©>RANDOM</color> empty tile.")
+                    "After <b>CAPTURING</b>, the piece staggers<br>to a <color=©>RANDOM</color> <color=∆>SAFE</color> empty tile.")
                 .WithRarity(Rarity.RARE)
                 .WithFocus(Gambit_Focus.LANDING, Gambit_Focus.UTILITY)
                 // Priced like a coin-flip: the stagger dodges retaliation as

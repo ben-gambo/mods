@@ -1,16 +1,17 @@
 # Drunkard
 
-> **After CAPTURING, the piece staggers to a RANDOM empty tile.**
+> **After CAPTURING, the piece staggers to a RANDOM SAFE empty tile.**
 
 Every time one of your pieces captures, it doesn't stay to gloat: it staggers
-on to a uniformly random intact empty tile, anywhere on the board. Sometimes
-that walks it out of the counter-attack it just invited; sometimes it delivers
-it gift-wrapped to the enemy's back rank. That's the drink talking.
+on to a uniformly random intact empty tile, anywhere on the board - but
+drunkard's luck holds, and it never stumbles onto a square an enemy threatens.
+It might wander deep behind enemy lines or wobble two squares sideways; it
+just won't fall into a capture doing it.
 
 Rare, 6 coins. Two sober exceptions: a capture that triggers a promotion is
-left alone (drunk pawns sober up at the finish line), and if the board has no
-intact empty tile the piece simply stays put - the card only relocates, it
-never kills.
+left alone (drunk pawns sober up at the finish line), and if every intact
+empty tile is threatened - or the board has none at all - the piece simply
+stays put. The card only relocates, it never kills.
 
 ## Install
 
@@ -43,9 +44,21 @@ it captured (another gambit may have moved it first), and that no promotion
 was triggered - `PromotionManager` remembers (piece, tile) from the capture
 frame and later instantiates the promoted piece into that remembered tile, so
 staggering a promoting pawn would strand the promotion. Then it picks a random
-board tile that is intact (not fallen, not shaking), landable, and empty,
-re-parents the piece there the same way the game's own moves do, and lets the
-game's DOFollow tween plus a punch-rotation wobble sell the stumble.
+board tile that is intact (not fallen, not shaking, not mid-transformation),
+empty, and unthreatened, re-parents the piece there the same way the game's
+own moves do, and lets the game's DOFollow tween plus a punch-rotation wobble
+sell the stumble.
+
+"Unthreatened" is judged exactly the way the game's own scare-scan judges it
+(`ThreatEffectBehaviour` / `TileBehaviour.IsThreatenedBy`): every living,
+un-trapped enemy piece contributes its attack squares - a pawn's diagonal
+`GetEatPlaces()` (its forward walk is not an attack), everyone else's
+`GetTilesAvailable()` (their moves are their attacks).
+
+One flag the tile filter deliberately avoids: `TileBehaviour.CanBeLandedOn`.
+Despite the name it does not mean "a piece may stand here" - it is the static
+stock-deployment marker, true only on your bottom row or two. Filtering on it
+is why 1.0.0's stagger always walked the piece back to its home rows.
 
 `StartingTile` is deliberately untouched: when the wave ends, the reset walks
 the drunkard back to its own post like any other survivor.

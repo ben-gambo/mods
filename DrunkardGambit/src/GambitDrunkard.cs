@@ -21,9 +21,24 @@ namespace Gambonanza.DrunkardGambit
     /// before the enemy turn that TurnManager schedules 0.5s after the move.
     ///
     /// Where the piece goes: a uniformly random board tile that is intact
-    /// (not fallen, not shaking), landable, and empty. If the board has no
-    /// such tile the piece just stays where it captured - the gambit only
-    /// relocates, it never kills.
+    /// (not fallen, not shaking, not mid-transformation), empty, and NOT
+    /// threatened by any enemy piece. Drunkard's luck: it staggers anywhere,
+    /// but never into a capture. If no such tile exists the piece just stays
+    /// where it captured - the gambit only relocates, it never kills.
+    ///
+    /// "Threatened" is computed the way the game's own scare-scan does it
+    /// (ThreatEffectBehaviour + TileBehaviour.IsThreatenedBy): every living,
+    /// un-trapped black piece contributes its attack squares - a pawn's
+    /// GetEatPlaces() (diagonals only; its forward walk is not an attack),
+    /// everyone else's GetTilesAvailable() (their moves ARE their attacks).
+    /// Those lists are re-used member buffers on the piece, so the results
+    /// are copied into the set immediately.
+    ///
+    /// Deliberately NOT in the tile filter: TileBehaviour.CanBeLandedOn.
+    /// Despite the name it is not "a piece may stand here" - it is the static
+    /// stock-deployment marker, true only on the player's bottom row or two
+    /// and never anywhere else, so filtering on it sends every stagger
+    /// straight back to the home rows (the 1.0.0 bug).
     ///
     /// Two deliberate non-moves:
     /// - A capture that triggers a promotion is left alone. PromotionManager
@@ -103,10 +118,10 @@ namespace Gambonanza.DrunkardGambit
             // Another gambit (or a second capture) may have moved it first.
             if (piece.CurrentTile != from || from.Piece != piece) yield break;
 
-            var target = PickRandomEmptyTile(from);
+            var target = PickRandomSafeEmptyTile(from);
             if (target == null)
             {
-                Debug.Log("[Drunkard] Not a single empty tile to stagger to. Steady as she goes.");
+                Debug.Log("[Drunkard] No safe empty tile to stagger to. Steady as she goes.");
                 yield break;
             }
 
@@ -128,17 +143,19 @@ namespace Gambonanza.DrunkardGambit
         }
 
         /// <summary>
-        /// A uniformly random intact, landable, empty board square. Shaking
-        /// tiles are excluded - depositing a drunk on ground that is about to
-        /// fall is a joke, but not this card's joke.
+        /// A uniformly random intact, empty, unthreatened board square.
+        /// Shaking tiles are excluded - depositing a drunk on ground that is
+        /// about to fall is a joke, but not this card's joke - and so are
+        /// tiles any enemy could capture on next turn.
         /// </summary>
-        private static TileBehaviour PickRandomEmptyTile(TileBehaviour except)
+        private static TileBehaviour PickRandomSafeEmptyTile(TileBehaviour except)
         {
             var bm = SingletonMonoBehaviour<BoardManager>.IsCreated() ? SingletonMonoBehaviour<BoardManager>.Instance : null;
             var board = bm != null ? bm.Board : null;
             if (board == null) return null;
 
-            var empties = new List<TileBehaviour>();
+            var threatened = GetEnemyThreatenedTiles();
+            var safe = new List<TileBehaviour>();
             int rows = board.GetLength(0);
             int cols = board.GetLength(1);
             for (int r = 0; r < rows; r++)
@@ -149,13 +166,46 @@ namespace Gambonanza.DrunkardGambit
                     if (tile == null || tile == except) continue;
                     if (!tile.gameObject.activeInHierarchy) continue;
                     if (tile.HasFell || tile.IsShaking) continue;
-                    if (!tile.CanBeLandedOn) continue;
+                    if (tile.TileVisual != null && tile.TileVisual.IsModifying) continue;
                     if (tile.Piece != null) continue;
-                    empties.Add(tile);
+                    if (threatened.Contains(tile)) continue;
+                    safe.Add(tile);
                 }
             }
-            if (empties.Count == 0) return null;
-            return empties[Random.Range(0, empties.Count)];
+            if (safe.Count == 0) return null;
+            return safe[Random.Range(0, safe.Count)];
+        }
+
+        /// <summary>
+        /// Every tile an enemy could capture on next turn, gathered the way
+        /// the game's own scare-scan gathers them: living un-trapped black
+        /// pieces, a pawn's diagonal GetEatPlaces(), everyone else's
+        /// GetTilesAvailable(). GetAllPieces() first, so freshly-captured
+        /// corpses (disabled, destroyed 0.6s later) are already filtered out.
+        /// </summary>
+        private static HashSet<TileBehaviour> GetEnemyThreatenedTiles()
+        {
+            var threatened = new HashSet<TileBehaviour>();
+            var em = SingletonMonoBehaviour<EnemyManager>.IsCreated() ? SingletonMonoBehaviour<EnemyManager>.Instance : null;
+            if (em == null) return threatened;
+
+            em.GetAllPieces();
+            foreach (var enemy in em.EnemyPieces)
+            {
+                if (enemy == null || enemy.IsDead) continue;
+                if (enemy.Modifier != null && enemy.Modifier.IsTrapped) continue;
+
+                var pawn = enemy.GetComponent<PawnPieceBehaviour>();
+                var tiles = pawn != null ? pawn.GetEatPlaces() : enemy.GetTilesAvailable();
+                if (tiles == null) continue;
+                // The non-pawn lists are re-used member buffers on the piece -
+                // copy the contents before anything else calls into it.
+                foreach (var tile in tiles)
+                {
+                    if (tile != null) threatened.Add(tile);
+                }
+            }
+            return threatened;
         }
 
         public override void Trigger()
