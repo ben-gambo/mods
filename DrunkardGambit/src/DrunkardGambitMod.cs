@@ -32,11 +32,12 @@ namespace Gambonanza.DrunkardGambit
                 // the stagger never lands on an enemy-threatened square.
                 .WithDescription(
                     "After <b>CAPTURING</b>, the piece staggers<br>to a <color=©>RANDOM</color> <color=∆>SAFE</color> empty tile.")
-                .WithRarity(Rarity.RARE)
+                .WithRarity(Rarity.COMMON)
                 .WithFocus(Gambit_Focus.LANDING, Gambit_Focus.UTILITY)
-                // Priced like a coin-flip: the stagger dodges retaliation as
-                // often as it walks the piece into it.
-                .WithPrice(6)
+                // Priced like the joke it is: the stagger is safe from
+                // capture but lands wherever it lands, and a piece flung
+                // across the board is as often a nuisance as a blessing.
+                .WithPrice(3)
                 .WithVisual(sprite)
                 .WithVisualScale(0.9f)
                 .WithBaseGambit<GambitDrunkard>()

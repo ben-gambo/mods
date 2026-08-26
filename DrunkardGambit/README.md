@@ -8,7 +8,9 @@ drunkard's luck holds, and it never stumbles onto a square an enemy threatens.
 It might wander deep behind enemy lines or wobble two squares sideways; it
 just won't fall into a capture doing it.
 
-Rare, 6 coins. Two sober exceptions: a capture that triggers a promotion is
+Common, 3 coins - the stagger is safe, but where it lands is nobody's plan,
+and a piece flung across the board is as often a nuisance as a blessing.
+Two sober exceptions: a capture that triggers a promotion is
 left alone (drunk pawns sober up at the finish line), and if every intact
 empty tile is threatened - or the board has none at all - the piece simply
 stays put. The card only relocates, it never kills.

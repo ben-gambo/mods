@@ -1,7 +1,7 @@
 {
     "id":           "DrunkardGambit",
     "name":         "Drunkard",
-    "version":      "1.0.1",
+    "version":      "1.0.2",
     "author":       "Ben",
     "entry":        "Gambonanza.DrunkardGambit.DrunkardGambitMod",
     "enabled":      true,
