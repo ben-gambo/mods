@@ -1,0 +1,11 @@
+{
+    "id":           "DrunkardGambit",
+    "name":         "Drunkard",
+    "version":      "1.0.0",
+    "author":       "Ben",
+    "entry":        "Gambonanza.DrunkardGambit.DrunkardGambitMod",
+    "enabled":      true,
+    "gameVersion":  ">=1.0",
+    "description":  "Adds Drunkard's Gambit: when capturing, the capturing piece staggers to a random empty tile.",
+    "dependencies": ["GambitApi"]
+}
