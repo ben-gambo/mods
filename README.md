@@ -10,6 +10,7 @@ artefact that gets released.
 | Mod | What it does | Latest |
 | --- | --- | --- |
 | [FallGuyGambit](FallGuyGambit/) | Pieces about to fall are saved - nearest square, or the stash. | [releases](../../releases?q=FallGuyGambit) |
+| [BedrockGambit](BedrockGambit/) | The board never crumbles while you hold it. | [releases](../../releases?q=BedrockGambit) |
 | [ImpatientGambit](ImpatientGambit/) | Skip every stage straight to its boss, earn 4x gold. | [releases](../../releases?q=ImpatientGambit) |
 | [Coop](Coop/) *(beta)* | Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice. | [releases](../../releases?q=Coop) |
 

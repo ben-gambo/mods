@@ -1,0 +1,11 @@
+{
+    "id":           "BedrockGambit",
+    "name":         "Bedrock's Gambit",
+    "version":      "1.0.0",
+    "author":       "Ben",
+    "entry":        "Gambonanza.BedrockGambit.BedrockGambitMod",
+    "enabled":      true,
+    "gameVersion":  ">=1.0",
+    "description":  "Adds Bedrock's Gambit: the board never crumbles while you hold it - the countdown stops, shaking tiles never fall, nothing new shakes.",
+    "dependencies": ["GambitApi", "CrumbleApi"]
+}
