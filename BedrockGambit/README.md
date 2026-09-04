@@ -78,26 +78,27 @@ when there is one to see.
 ## A note on the art
 
 The Minecraft bedrock block, as the inventory draws it: a 2:1 isometric cube,
-top face lit, right face in shadow. The texture is Mojang's; it is not in this
-repository. `make_art.py` reads it out of the Minecraft client jar in your
-launcher folder (or a path you pass) and commits only the derived card, and
-the card is fan art for a free mod - not a Minecraft product and not endorsed
-by Mojang.
+top face lit, right face in shadow, the texture at full resolution on every
+face. The texture is Mojang's; it is not in this repository. `make_art.py`
+reads it out of the Minecraft client jar in your launcher folder (or a path
+you pass) and commits only the derived card, and the card is fan art for a
+free mod - not a Minecraft product and not endorsed by Mojang.
 
-Card size is the whole problem. A gambit card is 28x32 and a cube face here
-is 11 pixels wide, so the 16x16 texture cannot simply be pasted on:
-nearest-sampling it onto the faces gives a hexagon of static. So the texture
-is first averaged down to 8x8 - bedrock's blotches survive, its grain does
-not - and then projected with heavy supersampling (each output pixel averages
-a 12x12 grid of samples), which is how Minecraft's own GUI keeps a block
-readable at 16 pixels. The three faces are lit much further apart than the
-game's 1.0 / 0.8 / 0.6 (top 1.8x, left 1.2x, right 0.75x), because bedrock's
-average value is dark and at this size the gentler ratios leave the faces
-indistinguishable.
+Resolution is the whole trick. A gambit card's canvas is 28x32 at the game's
+32 pixels per unit, and a cube face on that canvas would be 11 pixels wide -
+the 16x16 texture cannot be shown on it, and every attempt to stylize it down
+to that size read as a hexagon of static. So this card is drawn at four times
+the canvas (108x122 after cropping) and the game is simply allowed to render
+it that fine: GambitApi rebuilds a modded sprite's PPU so its canvas spans
+the same world height as the vanilla template, and Gambonanza's camera is a
+plain orthographic camera (size 5, no pixel-perfect pass), so a sprite with
+four times the texel density draws at full detail on screen while sitting
+exactly where a vanilla card sits.
 
-The canvas is the vanilla template's exact 28x32 so the texels land 1:1 on
-the game's pixel grid, with the conventions every card in this repo follows:
-two transparent rows on top for the highlight outline, bottom flush with the
-rail baseline, and side padding that puts the ink's centre on the template's
-x=0.45 pivot line. Registered with `WithVisualScale(0.9f)` like its
+The conventions every card in this repo follows are scaled by the same four:
+bottom flush with the rail baseline (vanilla cards are bottom-pivoted), two
+card-pixels of transparent padding on top so the game's green highlight
+outline is not clipped, side padding that puts the ink's centre on the
+template's x=0.45 pivot line, a dark outline around the silhouette, and the
+template's 28/32 aspect. Registered with `WithVisualScale(0.9f)` like its
 neighbours.

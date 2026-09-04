@@ -8,23 +8,26 @@ client jar in your launcher folder (or a path you pass in). Only the derived
 card, bedrock.png, is committed.
 
 The subject: the bedrock block as the Minecraft inventory draws it - a 2:1
-isometric cube, top face lit, right face in shadow. Card size is the problem
-to solve: a gambit card is 28x32 and a face here is 11 pixels wide, so the
-16x16 texture cannot be shown as-is (nearest-sampling it gives a hexagon of
-static). So the texture is first averaged down to 8x8 - the blotches survive,
-the grain does not - and then projected onto the cube with heavy supersampling
-(each output pixel averages a 12x12 grid of samples), which is how Minecraft's
-own GUI renders keep a block readable at 16 pixels. The three faces are then
-lit far apart (top 1.8x, left 1.2x, right 0.75x) because bedrock's average
-value is dark and Minecraft's gentler 1.0/0.8/0.6 ratios leave the faces
-indistinguishable at this size.
+isometric cube, top face lit, right face in shadow, the texture at full
+resolution on every face.
 
-Geometry notes, the same ones every card in this repo follows: vanilla gambit
-sprites are bottom-pivoted at PPU 32 with ink filling the canvas, and the
-vanilla template GambitApi rescales against is 28x32. This card is drawn to
-that exact canvas - 2 transparent rows on top for the highlight outline,
-bottom flush with the baseline, side padding placing the ink's centre on the
-template's x=0.45 pivot - so its texels land 1:1 on the game's pixel grid.
+Resolution is the whole trick. A gambit card's canvas is 28x32 at the game's
+32 pixels per unit, and a cube face on that canvas is 11 pixels wide - the
+16x16 texture cannot be shown on it. So this card is drawn at FOUR TIMES that
+canvas (112x128) and the game is simply allowed to render it that fine:
+GambitApi rebuilds a modded sprite's PPU so its canvas spans the same world
+height as the vanilla template, and Gambonanza's camera is a plain
+orthographic camera (size 5, no pixel-perfect pass), so a sprite with four
+times the texel density draws at full detail on screen while sitting exactly
+where a vanilla card sits. Each output pixel is still supersampled (a 6x6
+grid of samples) so the projection is clean.
+
+The card conventions every sprite in this repo follows are scaled by the
+same four: bottom flush with the rail baseline (vanilla cards are
+bottom-pivoted), two card-pixels of transparent padding on top so the game's
+green highlight outline is not clipped, side padding that places the ink's
+centre on the template's x=0.45 pivot line, a one-pixel dark outline around
+the silhouette, and the template's 28/32 aspect.
 
     python3 tools/make_art.py                   # newest jar in the launcher folder
     python3 tools/make_art.py path/to/1.21.5.jar
@@ -38,11 +41,13 @@ import sys
 import zipfile
 import zlib
 
-W, H = 28, 32          # the vanilla template canvas
-HALF, SIDE = 11, 17    # half width of the top rhombus; height of the vertical faces
-CX, TY = 14.0, 3.0     # front vertical edge; top vertex row (2 pad rows + 1 outline row)
-TOP, LEFT, RIGHT = 1.8, 1.2, 0.75
-SUPERSAMPLE = 12
+SCALE = 4                          # card canvases are 28x32; this one is drawn at 4x
+W, H = 28 * SCALE, 32 * SCALE
+HALF, SIDE = 11 * SCALE, 17 * SCALE   # half width of the top rhombus; height of the vertical faces
+CX, TY = 14.0 * SCALE, 3.0 * SCALE    # front vertical edge; top vertex row
+TOP, LEFT, RIGHT = 1.0, 0.8, 0.6      # Minecraft's own face shading
+GAIN = 1.15                           # a touch brighter overall; bedrock is a dark texture
+SUPERSAMPLE = 6
 
 CLEAR = (0, 0, 0, 0)
 OUTLINE = (0x16, 0x11, 0x1C, 255)
@@ -160,25 +165,12 @@ def load_texture(arg=None):
     raise SystemExit("no bedrock texture found - pass a client jar or the PNG as the first argument")
 
 
-def downsample(tex, k=2):
-    """Average kxk texel blocks. Keeps bedrock's blotches, drops its grain."""
-    n = len(tex) // k
-    out = []
-    for y in range(n):
-        row = []
-        for x in range(n):
-            cells = [tex[y * k + j][x * k + i] for j in range(k) for i in range(k)]
-            row.append(tuple(sum(c[i] for c in cells) // len(cells) for i in range(3)) + (255,))
-        out.append(row)
-    return out
-
-
 # --- the cube ---------------------------------------------------------------------
 
 def render(tex):
     """Supersampled 2:1 isometric cube. Every output pixel averages a
     SUPERSAMPLE x SUPERSAMPLE grid of samples, each inverse-mapped to a face
-    and a texel; alpha is the fraction of samples that hit the cube."""
+    and a texel; a pixel is ink when at least half of its samples hit the cube."""
     n = len(tex)
     px = [[CLEAR] * W for _ in range(H)]
     ss = SUPERSAMPLE
@@ -207,17 +199,17 @@ def render(tex):
                     else:
                         continue
                     c = tex[max(0, min(n - 1, int(v)))][max(0, min(n - 1, int(u)))]
-                    r += c[0] * f
-                    g += c[1] * f
-                    b += c[2] * f
+                    r += c[0] * f * GAIN
+                    g += c[1] * f * GAIN
+                    b += c[2] * f * GAIN
                     hits += 1
-            if hits * 2 >= ss * ss:  # a pixel is ink when at least half of it is cube
+            if hits * 2 >= ss * ss:
                 px[y][x] = (min(255, int(r / hits)), min(255, int(g / hits)), min(255, int(b / hits)), 255)
     return px
 
 
 def add_outline(px):
-    """Vanilla's defining trait: one solid dark line around the whole shape."""
+    """One solid dark line around the whole shape, as every vanilla card has."""
     solid = [[px[y][x][3] > 0 for x in range(W)] for y in range(H)]
     for y in range(H):
         for x in range(W):
@@ -231,31 +223,31 @@ def add_outline(px):
 
 
 def crop(px):
-    """Trim to the ink, then pad: 2 transparent rows on top (room for the green
-    highlight outline, which a standalone texture otherwise clips), bottom
-    flush (the bottom-pivoted card stands on the rail baseline), and side
-    padding chosen so the ink's centre sits on the template's x-pivot line
-    (GambitApi copies the template's 0.45 pivot onto the rebuilt sprite)."""
+    """Trim to the ink, then pad, all in card pixels scaled by SCALE: two rows
+    on top (the green highlight outline needs room, a standalone texture has
+    none), bottom flush (the bottom-pivoted card stands on the rail baseline),
+    and side padding chosen so the ink's centre sits on the template's x-pivot
+    line (GambitApi copies the template's 0.45 pivot onto the rebuilt sprite)."""
     xs = [x for y in range(H) for x in range(W) if px[y][x][3] > 0]
     ys = [y for y in range(H) for x in range(W) if px[y][x][3] > 0]
     tight = [row[min(xs):max(xs) + 1] for row in px[min(ys):max(ys) + 1]]
     w = len(tight[0])
-    left = 1
+    left = 1 * SCALE
     ink_centre = left + (w - 1) / 2
-    best_right, best_err = 1, float("inf")
-    for right in range(1, 5):
+    best_right, best_err = left, float("inf")
+    for right in range(1 * SCALE, 5 * SCALE):
         err = abs(ink_centre - TEMPLATE_PIVOT_X * (w + left + right))
         if err < best_err:
             best_right, best_err = right, err
     print(f"side padding: left {left}, right {best_right} (ink centre {best_err:+.2f}px off the pivot line)")
-    padded = [[CLEAR] * (w + left + best_right) for _ in range(2)]
+    padded = [[CLEAR] * (w + left + best_right) for _ in range(2 * SCALE)]
     for row in tight:
         padded.append([CLEAR] * left + row + [CLEAR] * best_right)
     return padded
 
 
 def build(tex):
-    px = render(downsample(tex))
+    px = render(tex)
     add_outline(px)
     return crop(px)
 
@@ -266,6 +258,6 @@ if __name__ == "__main__":
     w, h = write_png(out, build(tex))
     aspect = w / h
     delta = abs(aspect - 28 / 32) / (28 / 32)
-    print(f"canvas {w}x{h}, aspect {aspect:.3f} (template 0.875, delta {delta:.0%})")
+    print(f"canvas {w}x{h} ({w / SCALE:.1f}x{h / SCALE:.1f} card pixels), aspect {aspect:.3f} (template 0.875, delta {delta:.0%})")
     assert delta <= 0.10, "aspect drifted outside GambitApi's 10% tolerance - reshape the cube"
     print("wrote", out)
