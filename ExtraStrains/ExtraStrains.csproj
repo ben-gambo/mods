@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared settings and the GambonanzaModsDir / GambonanzaRefs lookup live in
+       ../Directory.Build.props. Everything here is DLL references rather than
+       project references, so building a mod never builds (or dirties) the
+       framework checkout it points at. -->
+
+  <PropertyGroup>
+    <AssemblyName>Gambonanza.ExtraStrains</AssemblyName>
+    <RootNamespace>Gambonanza.ExtraStrains</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Gambonanza.ModSdk">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The Strain Creation API: StrainBuilder, StrainBehaviour, Strains. -->
+    <Reference Include="Gambonanza.StrainApi">
+      <HintPath>$(GambonanzaModsDir)/Mods/StrainApi/Gambonanza.StrainApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The Crumble Control API: Short Fuse pushes the countdown with it. -->
+    <Reference Include="Gambonanza.CrumbleApi">
+      <HintPath>$(GambonanzaModsDir)/Mods/CrumbleApi/Gambonanza.CrumbleApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
