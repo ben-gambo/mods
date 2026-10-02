@@ -11,33 +11,68 @@ namespace UnityEngine
         private static readonly List<Object> Pending = new List<Object>();
         public static implicit operator bool(Object value) => !ReferenceEquals(value, null) && !value.Destroyed;
         public static void Destroy(Object value) { if (value) Pending.Add(value); }
+        public static void DontDestroyOnLoad(Object value) { if (value is GameObject go) go.Persistent = true; }
         public static void EndFrame()
         {
             foreach (var value in Pending.ToArray())
             {
                 value.Destroyed = true;
                 if (value is GameObject go)
+                {
+                    go.SetActive(false);
                     foreach (var component in go.Components)
                     {
                         component.Destroyed = true;
                         component.GetType().GetMethod("OnDestroy", BindingFlags.NonPublic | BindingFlags.Instance)?.Invoke(component, null);
                     }
+                }
             }
             Pending.Clear();
         }
-        internal static void ResetPending() => Pending.Clear();
+        internal static void ResetPending() { Pending.Clear(); GameObject.SimulateLifecycle = false; }
     }
     public class Transform : Object { }
     public class GameObject : Object
     {
+        public static bool SimulateLifecycle;
         internal readonly List<MonoBehaviour> Components = new List<MonoBehaviour>();
+        private readonly HashSet<MonoBehaviour> _awoken = new HashSet<MonoBehaviour>();
         public readonly Transform transform = new Transform();
+        public bool ActiveSelf = true;
+        public bool Persistent;
+        public HideFlags hideFlags;
+        public GameObject(string name = "") { }
+        public void SetActive(bool active)
+        {
+            if (ActiveSelf == active) return;
+            ActiveSelf = active;
+            if (!SimulateLifecycle) return;
+            foreach (var component in Components)
+            {
+                if (active && _awoken.Add(component)) Lifecycle(component, "Awake");
+                Lifecycle(component, active ? "OnEnable" : "OnDisable");
+            }
+        }
         public T AddComponent<T>() where T : MonoBehaviour, new()
         {
             var component = new T { gameObject = this };
             Components.Add(component);
+            if (SimulateLifecycle && ActiveSelf)
+            {
+                _awoken.Add(component);
+                Lifecycle(component, "Awake");
+                Lifecycle(component, "OnEnable");
+            }
             return component;
         }
+        private static void Lifecycle(MonoBehaviour component, string method)
+            => component.GetType().GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)?.Invoke(component, null);
+    }
+    public enum HideFlags { HideAndDontSave }
+    public static class Debug
+    {
+        public static readonly List<string> Messages = new List<string>();
+        public static void Log(string message) => Messages.Add(message);
     }
     public class MonoBehaviour : Object
     {
@@ -67,6 +102,7 @@ namespace Blukulele.CHE
     using Blukulele.Core;
     using UnityEngine;
     public enum Strain { GAMBIT_EXPIRE }
+    public enum DIFFICULTY { CUSTOM = -1, PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING }
     public class StrainManager : SingletonMonoBehaviour<StrainManager>
     {
         public readonly Dictionary<Strain, bool> ActivatedStrain = new Dictionary<Strain, bool> { [Strain.GAMBIT_EXPIRE] = true };
@@ -112,7 +148,15 @@ namespace Blukulele.CHE
             Amounts.Add(amount);
         }
     }
-    public class BaseData { public int BossToothCoin; }
+    public class BaseData
+    {
+        public int BossToothCoin;
+        public DIFFICULTY CurrentDifficulty;
+        public bool RunInProgress;
+        public int WinCounter;
+        public int MaxDifficultyReached;
+        public bool Difficulty_King_Unlocked;
+    }
     public class DataManager
     {
         public static DataManager Instance;
@@ -151,12 +195,9 @@ namespace Blukulele.Module.Audio
         public static void Play(Blukulele.Audio.AudioEvents value, bool loop = false, float pitch = 1) { Calls++; }
     }
 }
-namespace Gambonanza.StrainApi
+namespace Gambonanza.ModSdk
 {
-    public abstract class StrainBehaviour : UnityEngine.MonoBehaviour
-    {
-        public readonly List<string> Logs = new List<string>();
-        protected virtual void OnGameStarted() { }
-        protected void Log(string message) => Logs.Add(message);
-    }
+    public interface IMod { void OnLoad(IModContext context); }
+    public interface IModLifecycle { void OnEnable(); void OnDisable(); }
+    public interface IModContext { void LogLine(string message); }
 }

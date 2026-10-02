@@ -1,44 +1,58 @@
 using Gambonanza.ModSdk;
-using Gambonanza.StrainApi;
+using UnityEngine;
 
 namespace Gambonanza.CashbackStrain
 {
     public sealed class CashbackStrainMod : IMod, IModLifecycle
     {
-        public const string StrainId = "cashback";
         private IModContext _context;
+        private GameObject _root;
+        private CashbackBehaviour _runner;
 
         public void OnLoad(IModContext context) => _context = context;
 
         public void OnEnable()
         {
-            if (typeof(StrainBuilder).GetMethod("AsBonus", System.Type.EmptyTypes) == null)
+            if (_runner) return;
+            GameObject root = null;
+            try
             {
-                _context?.LogLine("Cashback requires StrainApi 1.1.0 or newer. Update StrainApi, then restart the game.");
-                return;
+                root = new GameObject("__Cashback");
+                root.hideFlags = HideFlags.HideAndDontSave;
+                root.SetActive(false); // Bind logging before Awake/OnEnable run.
+                var runner = root.AddComponent<CashbackBehaviour>();
+                runner.Bind(_context);
+                Object.DontDestroyOnLoad(root);
+                _root = root;
+                _runner = runner;
+                root.SetActive(true);
+                _context?.LogLine("enabled: expiring gambits pay their sell value on every difficulty.");
             }
-            RegisterBonus();
-        }
-
-        // Keep the new API call out of OnEnable so older APIs can report the update
-        // requirement before the runtime resolves AsBonus.
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private void RegisterBonus()
-        {
-            StrainBuilder.Create(StrainId)
-                .WithName("Cashback")
-                .WithDescription("Expiring gambits pay their <color=*>sell value</color>.")
-                .AsBonus()
-                .WithGameIcon("SPR_Lucky_Coin")
-                .WithBehaviour<CashbackBehaviour>()
-                .Register();
-
-            _context?.LogLine("Cashback registered: pick it in the Custom run bonuses, or use 'strain on cashback'.");
+            catch (System.Exception ex)
+            {
+                if (_runner) _runner.TearDown();
+                if (root)
+                {
+                    root.SetActive(false);
+                    Object.Destroy(root);
+                }
+                _root = null;
+                _runner = null;
+                _context?.LogLine("could not enable Cashback: " + ex);
+            }
         }
 
         public void OnDisable()
         {
-            Strains.Unregister(StrainId);
+            if (_runner) _runner.TearDown();
+            if (_root)
+            {
+                _root.SetActive(false);
+                Object.Destroy(_root);
+            }
+            _runner = null;
+            _root = null;
+            _context?.LogLine("disabled.");
         }
     }
 }

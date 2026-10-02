@@ -9,10 +9,6 @@
       <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Gambonanza.StrainApi">
-      <HintPath>$(GambonanzaModsDir)/Mods/StrainApi/Gambonanza.StrainApi.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
       <Private>false</Private>

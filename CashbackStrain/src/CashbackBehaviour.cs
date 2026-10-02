@@ -4,22 +4,26 @@ using Blukulele.Audio;
 using Blukulele.CHE;
 using Blukulele.Core;
 using Blukulele.Module.Audio;
-using Gambonanza.StrainApi;
+using Gambonanza.ModSdk;
 using UnityEngine;
 
 namespace Gambonanza.CashbackStrain
 {
     /// <summary>Pay an expiring gambit's monetary sell value without selling it.</summary>
-    public sealed class CashbackBehaviour : StrainBehaviour
+    public sealed class CashbackBehaviour : MonoBehaviour
     {
-        public const string StrainId = "cashback";
-
         private readonly HashSet<GambitBehaviour> _settled = new HashSet<GambitBehaviour>();
+        private IModContext _context;
         private OrderedDelegateHooks<State> _hooks;
         private GameManager _game;
         private SellManager _sell;
         private bool _active;
         private string _lastBindError;
+
+        internal void Bind(IModContext context) => _context = context;
+
+        // The entry calls this synchronously before Unity's deferred destruction.
+        internal void TearDown() => Detach();
 
         private void Awake()
         {
@@ -38,8 +42,6 @@ namespace Gambonanza.CashbackStrain
         private void Start() => Reconcile();
 
         private void Update() => Reconcile();
-
-        protected override void OnGameStarted() => Reconcile();
 
         private void OnDisable() => Detach();
 
@@ -99,7 +101,7 @@ namespace Gambonanza.CashbackStrain
                 catch (Exception ex) { Log("could not read expiry sell value: " + ex); }
 
                 // Exactly once, in its existing position. Native expiration and its
-                // cleanup still run even when this strain is disabled or errors.
+                // cleanup still run even when this mod is disabled or errors.
                 original(state);
 
                 if (!eligible || !_active || !expiry || !gambit ||
@@ -190,6 +192,12 @@ namespace Gambonanza.CashbackStrain
         private void RememberSale(GambitBehaviour gambit)
         {
             if (_active && gambit) _settled.Add(gambit);
+        }
+
+        private void Log(string message)
+        {
+            if (_context != null) _context.LogLine(message);
+            else Debug.Log("[Cashback] " + message);
         }
 
         private void Detach()

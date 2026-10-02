@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../src/CashbackBehaviour.cs" Link="CashbackBehaviour.cs" />
+    <Compile Include="../src/CashbackStrainMod.cs" Link="CashbackStrainMod.cs" />
     <Compile Include="../src/OrderedDelegateHooks.cs" Link="OrderedDelegateHooks.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Stubs.cs" />

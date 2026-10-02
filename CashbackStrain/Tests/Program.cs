@@ -11,7 +11,7 @@ using UnityEngine;
 internal static class Program
 {
     private static int _checks;
-    private static void Main()
+    private static void Main(string[] args)
     {
         Run("expires in original order and pays after native cleanup", ExpirationOrder);
         Run("under threshold remains unpaid until its expiry", Threshold);
@@ -34,6 +34,18 @@ internal static class Program
         Run("native exceptions propagate without retrying or paying", NativeFailure);
         Run("manager replacement restores the previous event field", ManagerReplacement);
         Run("zero-value expiry creates no coin event", ZeroValue);
+        Run("enabled mod pays on King without a bonus selection or API", EnabledModOnKing);
+        Run("mod hot toggles detach immediately and never duplicate hosts", ModHotToggle);
+        Run("persistent host binds when native managers appear after startup", ModEarlyStartup);
+        Run("one enabled host pays across successive runs", ModSuccessiveRuns);
+        Run("mod follows replacement game and sell managers", ModManagerReplacement);
+        if (args.Length == 2 && args[0] == "--assembly")
+            Run("production assembly keeps its identity without a strain API dependency", () =>
+            {
+                var assembly = Assembly.LoadFile(System.IO.Path.GetFullPath(args[1]));
+                Equal("Gambonanza.CashbackStrain", assembly.GetName().Name);
+                False(assembly.GetReferencedAssemblies().Any(reference => reference.Name == "Gambonanza.StrainApi"));
+            });
         Console.WriteLine($"PASS: {_checks} Cashback checks.");
     }
 
@@ -224,6 +236,114 @@ internal static class Program
     {
         using var f = new Fixture(); var g = f.Add(true); g.Expiry.Counter = 2;
         f.Enable(); f.Win(); Equal(0, f.Coins.Credits.Count); Equal(0, f.Animation.Amounts.Count);
+    }
+
+    private static void EnabledModOnKing()
+    {
+        using var f = new Fixture(); var g = f.Add(); g.Expiry.Counter = 2;
+        var data = DataManager.Instance.Data;
+        data.CurrentDifficulty = DIFFICULTY.KING;
+        data.RunInProgress = true; data.WinCounter = 4;
+        data.MaxDifficultyReached = 4; data.Difficulty_King_Unlocked = true;
+        using var mod = new ModFixture(); mod.Entry.OnEnable();
+        True(mod.Runner.gameObject.Persistent); f.Win();
+        Equal(6, f.Coins.Coins); Equal(DIFFICULTY.KING, data.CurrentDifficulty);
+        True(data.RunInProgress); Equal(4, data.WinCounter);
+        Equal(4, data.MaxDifficultyReached); True(data.Difficulty_King_Unlocked);
+        True(mod.Context.Lines.Any(line => line.Contains("+$6")));
+        // This source-linked program has no third-party strain namespace or DLL.
+        True(typeof(CashbackBehaviour).BaseType == typeof(MonoBehaviour));
+    }
+
+    private static void ModHotToggle()
+    {
+        using var f = new Fixture(); var g = f.Add(); g.Expiry.Counter = 1;
+        var original = f.Game.onStateChanged;
+        using var mod = new ModFixture(); mod.Entry.OnEnable();
+        var first = mod.Runner; var captured = f.Game.onStateChanged;
+        mod.Entry.OnEnable(); True(ReferenceEquals(first, mod.Runner));
+        True(ReferenceEquals(captured, f.Game.onStateChanged));
+        Equal(1, f.Sell.OnSellGambit.GetInvocationList().Length);
+        mod.Entry.OnDisable(); mod.Entry.OnDisable();
+        True(first); False(first.gameObject.ActiveSelf);
+        True(original == f.Game.onStateChanged); True(f.Sell.OnSellGambit == null);
+        // Pending destruction must not let the old host pay via a captured graph.
+        captured(State.WIN); Equal(0, f.Coins.Coins); Equal(2, g.Expiry.Counter);
+        mod.Entry.OnEnable(); False(ReferenceEquals(first, mod.Runner));
+        captured(State.INGAME); Equal(0, f.Coins.Coins);
+        f.Win(); Equal(6, f.Coins.Coins); Equal(1, f.Coins.Credits.Count);
+    }
+
+    private static void ModEarlyStartup()
+    {
+        using var f = new Fixture(); var g = f.Add(); g.Expiry.Counter = 2;
+        var original = f.Game.onStateChanged;
+        SingletonMonoBehaviour<GameManager>.Instance = null;
+        SingletonMonoBehaviour<SellManager>.Instance = null;
+        using var mod = new ModFixture(); mod.Entry.OnEnable();
+        True(mod.Runner); True(original == f.Game.onStateChanged);
+        SingletonMonoBehaviour<GameManager>.Instance = f.Game;
+        SingletonMonoBehaviour<SellManager>.Instance = f.Sell;
+        Tick(mod.Runner); True(original != f.Game.onStateChanged);
+        f.Win(); Equal(6, f.Coins.Coins);
+    }
+
+    private static void ModSuccessiveRuns()
+    {
+        using var f = new Fixture(); var first = f.Add(); first.Expiry.Counter = 2;
+        using var mod = new ModFixture(); mod.Entry.OnEnable(); var host = mod.Runner;
+        f.Win(); Equal(6, f.Coins.Coins);
+        UnityEngine.Object.EndFrame(); Tick(host);
+        f.Game.onStateChanged?.Invoke(State.MENU);
+        var next = f.Add(); next.Expiry.Counter = 2; Tick(host); f.Win();
+        Equal(12, f.Coins.Coins); True(ReferenceEquals(host, mod.Runner));
+        True(host.gameObject.Persistent);
+    }
+
+    private static void ModManagerReplacement()
+    {
+        using var f = new Fixture(); var first = f.Add(); first.Expiry.Counter = 1;
+        var original = f.Game.onStateChanged;
+        using var mod = new ModFixture(); mod.Entry.OnEnable();
+        var replacementGame = Fixture.Manager<GameManager>();
+        var replacementSell = Fixture.Manager<SellManager>();
+        SingletonMonoBehaviour<GameManager>.Instance = replacementGame;
+        SingletonMonoBehaviour<SellManager>.Instance = replacementSell;
+        var next = f.Add(); next.Expiry.Counter = 2;
+        var replacementOriginal = replacementGame.onStateChanged;
+        Tick(mod.Runner);
+        True(original == f.Game.onStateChanged); True(f.Sell.OnSellGambit == null);
+        Equal(1, replacementSell.OnSellGambit.GetInvocationList().Length);
+        replacementGame.onStateChanged(State.WIN);
+        Equal(6, f.Coins.Coins); Equal(1, first.Expiry.Counter);
+        mod.Entry.OnDisable(); True(replacementOriginal == replacementGame.onStateChanged);
+        True(replacementSell.OnSellGambit == null);
+        // Keep the simulated native destruction callback attached to its manager.
+        UnityEngine.Object.EndFrame();
+        SingletonMonoBehaviour<GameManager>.Instance = f.Game;
+        SingletonMonoBehaviour<SellManager>.Instance = f.Sell;
+    }
+
+    private static void Tick(CashbackBehaviour runner) => typeof(CashbackBehaviour)
+        .GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(runner, null);
+
+    private sealed class FakeContext : Gambonanza.ModSdk.IModContext
+    {
+        public readonly List<string> Lines = new List<string>();
+        public void LogLine(string message) => Lines.Add(message);
+    }
+
+    private sealed class ModFixture : IDisposable
+    {
+        public readonly CashbackStrainMod Entry = new CashbackStrainMod();
+        public readonly FakeContext Context = new FakeContext();
+        public CashbackBehaviour Runner => (CashbackBehaviour)typeof(CashbackStrainMod)
+            .GetField("_runner", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(Entry);
+        public ModFixture() { GameObject.SimulateLifecycle = true; Entry.OnLoad(Context); }
+        public void Dispose()
+        {
+            Entry.OnDisable(); UnityEngine.Object.EndFrame(); GameObject.SimulateLifecycle = false;
+        }
     }
 
     private static void True(bool condition) { if (!condition) throw new Exception("expected true"); }

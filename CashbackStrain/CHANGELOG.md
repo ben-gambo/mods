@@ -1,11 +1,14 @@
-## Cashback 1.0.0
+## Cashback 2.0.0
 
-- Adds Cashback as an optional bonus on the Mod Strains page, with no
-  added heat.
-- Gambits removed by the Gambit Expiry strain pay their current sell value,
-  including Collector and Boss Tooth.
-- Pays once per expired gambit, without triggering manual-sale effects.
-- Keeps the bonus through saving and continuing a run.
+- Cashback is now a regular QoL mod, active whenever enabled. It works in
+  preset runs, including King, without adding a strain or bonus or changing
+  native difficulty and in-game gambit completion tracking.
+- Removes the Cashback bonus card and the Strain Creation API dependency.
+- Expiring gambits still pay their current sell value, including Collector
+  and Boss Tooth, once per gambit and without triggering manual-sale effects.
+- Disabling Cashback immediately restores normal expiry behavior.
 
-Requires StrainApi 1.1.0 or newer and the GambonanzaMods framework. Unpack
-`CashbackStrain.zip` into your game's `Mods/` folder.
+Update the existing `CashbackStrain` folder with this ZIP and restart the
+game. Only the GambonanzaMods framework is required. An existing Custom run
+keeps its original difficulty; use a King preset for King completion marks.
+The framework's separate Steam achievement setting remains unchanged.
