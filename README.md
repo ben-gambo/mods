@@ -12,6 +12,7 @@ artefact that gets released.
 | [FallGuyGambit](FallGuyGambit/) | Pieces about to fall are saved - nearest square, or the stash. | [releases](../../releases?q=FallGuyGambit) |
 | [BedrockGambit](BedrockGambit/) | The board never crumbles while you hold it. | [releases](../../releases?q=BedrockGambit) |
 | [ExtraStrains](ExtraStrains/) | Two strains: Taxman (every game costs $1) and Short Fuse (the crumble starts 2 turns in). | [releases](../../releases?q=ExtraStrains) |
+| [CashbackStrain](CashbackStrain/) | A bonus strain: expiring gambits pay their sell value. | [releases](../../releases?q=CashbackStrain) |
 | [ImpatientGambit](ImpatientGambit/) | Skip every stage straight to its boss, earn 4x gold. | [releases](../../releases?q=ImpatientGambit) |
 | [Coop](Coop/) *(beta)* | Two players, one board, over Steam. Shared shop, own pieces, enemy plays twice. | [releases](../../releases?q=Coop) |
 

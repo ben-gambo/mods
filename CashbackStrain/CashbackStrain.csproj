@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Gambonanza.CashbackStrain</AssemblyName>
+    <RootNamespace>Gambonanza.CashbackStrain</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <Reference Include="Gambonanza.ModSdk">
+      <HintPath>$(GambonanzaModsDir)/prebuilt/Gambonanza.ModSdk.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Gambonanza.StrainApi">
+      <HintPath>$(GambonanzaModsDir)/Mods/StrainApi/Gambonanza.StrainApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GambonanzaRefs)/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(GambonanzaRefs)/Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

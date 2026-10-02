@@ -1,0 +1,11 @@
+{
+    "id": "CashbackStrain",
+    "name": "Cashback",
+    "version": "1.0.0",
+    "author": "Ben",
+    "entry": "Gambonanza.CashbackStrain.CashbackStrainMod",
+    "enabled": true,
+    "gameVersion": ">=1.0",
+    "description": "A bonus strain: expiring gambits pay their sell value. Pick Cashback in the blue bonus column on the Mod Strains page before a Custom run. Adds no heat. Requires StrainApi 1.1.0 or newer.",
+    "dependencies": ["StrainApi"]
+}
